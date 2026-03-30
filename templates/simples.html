@@ -544,6 +544,67 @@
         <!-- TRANSACOES -->
         <section>
             <h2>📊 Transações</h2>
+            
+            <!-- FILTROS AVANÇADOS -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #e2e8f0;">
+                <h3 style="margin: 0 0 15px 0; font-size: 14px; color: #2c3e50; font-weight: 600;">🔍 Filtros Avançados</h3>
+                
+                <!-- Linha 1: Tipo, Categoria, Status -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <!-- Tipo de Transação -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">Tipo</label>
+                        <select id="filtroTipoTransacao" onchange="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            <option value="">Todos</option>
+                            <option value="RECEITA">📈 Receita</option>
+                            <option value="DESPESA">📉 Despesa</option>
+                            <option value="TRANSFERENCIA">💸 Transferência</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Categoria -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">Categoria</label>
+                        <select id="filtroCategoriaAvancado" onchange="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Status -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">Status</label>
+                        <select id="filtroStatusAvancado" onchange="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            <option value="">Todos</option>
+                            <option value="PAGO">✅ Pago</option>
+                            <option value="PENDENTE">⏳ Pendente</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Linha 2: Conta, Busca, Botões -->
+                <div style="display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 10px; align-items: flex-end;">
+                    <!-- Conta -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">Conta</label>
+                        <select id="filtroContaAvancado" onchange="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Busca por Descrição -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">🔎 Buscar Descrição</label>
+                        <input type="text" id="filtroBuscaDescricao" placeholder="Digite para buscar..." onkeyup="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    </div>
+                    
+                    <!-- Botão Limpar -->
+                    <button type="button" onclick="limparFiltrosAvancados()" style="padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">❌ Limpar</button>
+                    
+                    <!-- Info Filtros -->
+                    <div id="infoFiltrosAvancados" style="color: #666; font-size: 12px; text-align: right;"></div>
+                </div>
+            </div>
+            
             <table>
                 <thead>
                     <tr>
@@ -747,7 +808,9 @@
         <!-- GRÁFICO DE LINHAS -->
         <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 30px;">
             <h3 style="margin-top: 0; color: #2c3e50;">📈 Histórico de Saldos</h3>
-            <canvas id="graficosaldoLinhas" style="max-height: 400px;"></canvas>
+            <div style="position: relative; height: 800px; width: 100%;">
+                <canvas id="graficosaldoLinhas"></canvas>
+            </div>
         </div>
 
         <!-- TABELA DE SALDOS INDIVIDUAIS -->
@@ -1041,6 +1104,18 @@
         let dataInicialFiltro = null;
         let dataFinalFiltro = null;
         let filtroContaDespesas = null;  // Filtro de conta para despesas
+        let mapaCartoes = {};  // Mapa global para traducao de cartao_id -> bandeira
+        
+        // FILTROS AVANÇADOS
+        let filtrosAtivos = {
+            tipo: '',
+            categoria: '',
+            status: '',
+            conta: '',
+            busca: ''
+        };
+        let transacoesOriginais = [];  // Cópia original para aplicar filtros
+        
         let sortTransacoes = { campo: 'data_vencimento', direcao: 'asc' };  // Ordenação: campo e direção
 
         function atualizarInfoPeriodo() {
@@ -1098,6 +1173,136 @@
             carregarDespesasPorConta();
         }
 
+        // ============ FILTROS AVANÇADOS ============
+        
+        function atualizarSelectsFiltrosAvancados() {
+            // Categorias
+            fetch('/api/categorias')
+                .then(r => r.json())
+                .then(categorias => {
+                    const select = document.getElementById('filtroCategoriaAvancado');
+                    let html = '<option value="">Todas</option>';
+                    categorias.forEach(cat => {
+                        html += `<option value="${cat.nome}">${cat.nome}</option>`;
+                    });
+                    select.innerHTML = html;
+                })
+                .catch(e => console.error('❌ Erro ao carregar categorias:', e));
+            
+            // Contas
+            fetch('/api/contas')
+                .then(r => r.json())
+                .then(contas => {
+                    const select = document.getElementById('filtroContaAvancado');
+                    let html = '<option value="">Todas</option>';
+                    contas.forEach(conta => {
+                        html += `<option value="${conta.bandeira}">${conta.bandeira} (${conta.tipo})</option>`;
+                    });
+                    select.innerHTML = html;
+                })
+                .catch(e => console.error('❌ Erro ao carregar contas:', e));
+        }
+        
+        function aplicarFiltrosAvancados() {
+            // Pega valores dos campos
+            filtrosAtivos.tipo = document.getElementById('filtroTipoTransacao').value;
+            filtrosAtivos.categoria = document.getElementById('filtroCategoriaAvancado').value;
+            filtrosAtivos.status = document.getElementById('filtroStatusAvancado').value;
+            filtrosAtivos.conta = document.getElementById('filtroContaAvancado').value;
+            filtrosAtivos.busca = document.getElementById('filtroBuscaDescricao').value.toLowerCase();
+            
+            console.log('🔍 Filtros aplicados:', filtrosAtivos);
+            
+            // Renderiza as transações com filtros
+            renderizarTransacoesFiltradas();
+            atualizarInfoFiltrosAvancados();
+        }
+        
+        function renderizarTransacoesFiltradas() {
+            let transacoesFiltradas = transacoesOriginais.filter(t => {
+                // Filtro por tipo
+                if (filtrosAtivos.tipo && t.tipo !== filtrosAtivos.tipo) return false;
+                
+                // Filtro por categoria
+                if (filtrosAtivos.categoria && t.categoria !== filtrosAtivos.categoria) return false;
+                
+                // Filtro por status
+                if (filtrosAtivos.status && t.status !== filtrosAtivos.status) return false;
+                
+                // Filtro por conta
+                if (filtrosAtivos.conta && t.nome_conta !== filtrosAtivos.conta) return false;
+                
+                // Filtro por descrição (busca)
+                if (filtrosAtivos.busca && !t.descricao.toLowerCase().includes(filtrosAtivos.busca)) return false;
+                
+                // Filtro de data (mantém o filtro de data existente)
+                if (!ehDataDentroFiltro(t.data_vencimento)) return false;
+                
+                return true;
+            });
+            
+            console.log('✅ Transações filtradas:', transacoesFiltradas.length);
+            
+            // Ordena os resultados
+            ordenarTransacoes(transacoesFiltradas, mapaCartoes);
+            
+            // Renderiza na tabela
+            const tbody = document.getElementById('transacoes');
+            if (transacoesFiltradas.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#999;">Nenhuma transação encontrada com esses filtros</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = transacoesFiltradas.map(t => `
+                <tr>
+                    <td>${t.data_vencimento}</td>
+                    <td>${t.tipo === 'RECEITA' ? '📈' : t.tipo === 'DESPESA' ? '📉' : '💸'} ${t.tipo}</td>
+                    <td>${t.categoria}</td>
+                    <td>${t.subcategoria || '-'}</td>
+                    <td>${t.nome_conta || t.cartao_id || '-'}</td>
+                    <td>${t.status === 'PAGO' ? '✅' : '⏳'} ${t.status || '-'}</td>
+                    <td>${t.parcela || '-'}</td>
+                    <td>R$ ${parseFloat(t.valor).toFixed(2)}</td>
+                    <td>
+                        <button onclick="abrirEdicaoTransacao(${t.id})" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">✏️</button>
+                        <button onclick="deletarTransacao(${t.id})" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function limparFiltrosAvancados() {
+            // Limpa todos os filtros
+            document.getElementById('filtroTipoTransacao').value = '';
+            document.getElementById('filtroCategoriaAvancado').value = '';
+            document.getElementById('filtroStatusAvancado').value = '';
+            document.getElementById('filtroContaAvancado').value = '';
+            document.getElementById('filtroBuscaDescricao').value = '';
+            
+            filtrosAtivos = {
+                tipo: '',
+                categoria: '',
+                status: '',
+                conta: '',
+                busca: ''
+            };
+            
+            console.log('🔄 Filtros limpos');
+            renderizarTransacoesFiltradas();
+            atualizarInfoFiltrosAvancados();
+        }
+        
+        function atualizarInfoFiltrosAvancados() {
+            const info = document.getElementById('infoFiltrosAvancados');
+            const filtrosAtivosCount = Object.values(filtrosAtivos).filter(v => v).length;
+            
+            if (filtrosAtivosCount > 0) {
+                info.textContent = `📊 ${filtrosAtivosCount} filtro(s) ativo(s)`;
+            } else {
+                info.textContent = '';
+            }
+        }
+
         function getLogoBanco(bandeira) {
             const logos = {
                 'Bradesco': '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#142D6B"/><text x="12" y="16" font-size="12" font-weight="bold" fill="white" text-anchor="middle">BD</text></svg>',
@@ -1135,6 +1340,7 @@
             carregarCartoes();
             carregarFaturas();
             atualizarSelectContasDespesas();
+            atualizarSelectsFiltrosAvancados();
             carregarDespesasPorConta();
             configurarFormularios();
             configurarDatas();
@@ -1647,7 +1853,8 @@
             ])
             .then(([trans, cartoes]) => {
                 console.log('📊 Dados recebidos: ', trans.length, 'transações,', cartoes.length, 'cartões');
-                const mapaCartoes = {};
+                // Usar variável global
+                mapaCartoes = {};
                 cartoes.forEach(c => {
                     mapaCartoes[c.id] = c.bandeira;
                 });
@@ -1656,56 +1863,17 @@
                 trans = trans.filter(t => ehDataDentroFiltro(t.data_vencimento));
                 console.log('Após filtro de data:', trans.length, 'transações');
                 
-                // Ordenar transações
-                trans = ordenarTransacoes(trans, mapaCartoes);
+                // NOVO: Guardar as transações originais para filtros avançados
+                transacoesOriginais = trans.map(t => ({
+                    ...t,
+                    nome_conta: t.tipo_conta === 'CREDITO' ? (mapaCartoes[t.cartao_id] || 'Cartão ' + t.cartao_id) : (t.nome_conta || '-')
+                }));
                 
-                let html = '';
-                trans.forEach(t => {
-                    const tag = t.tipo === 'RECEITA' ? 'tag-receita' : 'tag-despesa';
-                    const status = t.status ? t.status : 'PREVISTO';
-                    const subcategoria = t.subcategoria ? t.subcategoria : '-';
-                    
-                    // Determinar nome da conta baseado no tipo
-                    let nomeConta = '-';
-                    let logoConta = '';
-                    
-                    if (t.tipo_conta === 'CREDITO' && t.cartao_id) {
-                        // Para crédito, buscar o nome do cartão
-                        nomeConta = mapaCartoes[t.cartao_id] || 'Cartão ' + t.cartao_id;
-                        logoConta = getLogoBanco(nomeConta);
-                    } else if (t.nome_conta) {
-                        // Para corrente, usar nome_conta
-                        nomeConta = t.nome_conta;
-                        logoConta = getLogoBanco(nomeConta);
-                    }
-                    
-                    const nomeContaHTML = '<span class="logo-banco">' + logoConta + '</span>' + nomeConta;
-                    const parcela = t.parcela ? t.parcela : '-';
-                    const efetuada = t.efetuada ? t.efetuada : false;
-                    const btnDisabled = efetuada ? ' disabled' : '';
-                    const btnTexto = efetuada ? '✓' : 'Efetivar';
-                    const btnEditarDisabled = efetuada ? ' disabled' : '';
-                    html += '<tr><td>' + t.data_vencimento + '</td><td><span class="tag ' + tag + '">' + t.tipo + '</span></td><td>' + t.categoria + '</td><td>' + subcategoria + '</td><td>' + nomeContaHTML + '</td><td>' + status + '</td><td>' + parcela + '</td><td>R$ ' + t.valor.toFixed(2) + '</td><td><button class="btn-efetivar" data-id="' + t.id + '"' + btnDisabled + '>' + btnTexto + '</button> <button class="btn-editar" data-type="transacao" data-id="' + t.id + '"' + btnEditarDisabled + '>✏️</button> <button class="btn-deletar" data-id="' + t.id + '">🗑️</button></td></tr>';
-                });
-                const finalHtml = html ? html : '<tr><td colspan="9" style="text-align:center;">Nenhuma transação</td></tr>';
-                document.getElementById('transacoes').innerHTML = finalHtml;
-                console.log('✏️ HTML renderizado, chamando sort functions...');
+                // NOVO: Atualizar selects de filtros avançados
+                atualizarSelectsFiltrosAvancados();
                 
-                // Atualizar indicadores de ordenação e configurar cliques
-                atualizarIndicadoresSort();
-                configurarCliqueSortHeaders();
-                
-                document.querySelectorAll('.btn-efetivar').forEach(btn => {
-                    btn.onclick = () => efetivarTransacao(btn.dataset.id);
-                });
-                
-                document.querySelectorAll('.btn-editar[data-type="transacao"]').forEach(btn => {
-                    btn.onclick = () => abrirEditarTransacao(btn.dataset.id);
-                });
-                
-                document.querySelectorAll('.btn-deletar').forEach(btn => {
-                    btn.onclick = () => deletarTransacao(btn.dataset.id);
-                });
+                // Renderizar com filtros (novo sistema)
+                renderizarTransacoesFiltradas();
                 console.log('✅ carregarTransacoes() completo');
             })
             .catch(e => console.error('Erro transacoes:', e));
@@ -3184,10 +3352,12 @@
                 .then(contas => {
                     let html = '';
                     contas.forEach(c => {
-                        const checkedAttr = 'checked'; // Por padrão, todas selecionadas
+                        // Apenas CORRENTE e INVESTIMENTO por padrão no gráfico
+                        // Excluir CARTAO do total consolidado
+                        const checkedAttr = (c.tipo === 'CORRENTE' || c.tipo === 'INVESTIMENTO') ? 'checked' : '';
                         html += `<label style="display: flex; align-items: center; color: white; cursor: pointer;">
                             <input type="checkbox" class="saldoContaCheckbox" value="${c.id}" ${checkedAttr} style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
-                            <span>${getLogoBancoText(c.bandeira)}</span>
+                            <span>${getLogoBancoText(c.bandeira)} (${c.tipo})</span>
                         </label>`;
                     });
                     document.getElementById('listaSaldoContas').innerHTML = html;
@@ -3226,8 +3396,8 @@
         }
 
         function carregarSaldosGrafico() {
-            // Pegar contas selecionadas
-            const contasSelecionadas = Array.from(document.querySelectorAll('.saldoContaCheckbox:checked')).map(c => c.value);
+            // Pegar contas selecionadas (converter para número para evitar erros de tipo)
+            const contasSelecionadas = Array.from(document.querySelectorAll('.saldoContaCheckbox:checked')).map(c => parseInt(c.value, 10));
             
             if (contasSelecionadas.length === 0) {
                 alert('⚠️ Selecione pelo menos uma conta!');
@@ -3238,36 +3408,49 @@
             const dataFinal = document.getElementById('filtroSaldoDataFinal').value;
             const hoje = new Date().toISOString().split('T')[0];
             
+            console.log('📊 Contas selecionadas:', contasSelecionadas, 'Período:', dataInicial, '-', dataFinal);
+            
             // Buscar TANTO históricos quanto dados das contas
             Promise.all([
                 // Históricos de saldos
                 Promise.all(contasSelecionadas.map(contaId => 
-                    fetch(`/api/historico-saldos/${contaId}?data_inicio=${dataInicial}&data_fim=${dataFinal}`).then(r => r.json())
+                    fetch(`/api/historico-saldos/${contaId}?data_inicio=${dataInicial}&data_fim=${dataFinal}`)
+                        .then(r => r.json())
+                        .catch(e => {
+                            console.error(`Erro histórico conta ${contaId}:`, e);
+                            return { conta: { id: contaId, bandeira: 'Desconhecido' }, historico: [] };
+                        })
                 )),
                 // Dados das contas (para saldo_manual)
                 fetch('/api/contas').then(r => r.json())
             ])
             .then(([historicoArray, todasContas]) => {
+                console.log('📥 Históricos recebidos:', historicoArray.length, 'Contas totais:', todasContas.length);
+                
                 // Consolidar dados para o gráfico
                 const datas = new Set();
                 const dadosPorConta = {};
                 const mapaContas = {};
                 
-                // Criar mapa de contas para acesso rápido
+                // Criar mapa de contas para acesso rápido (normalizando IDs como números)
                 todasContas.forEach(c => {
                     mapaContas[c.id] = c;
                 });
                 
                 // Processar históricos
                 historicoArray.forEach(dados => {
-                    dadosPorConta[dados.conta.id] = {
+                    const contaId = dados.conta.id;
+                    console.log(`📈 Processando historico da conta ${contaId} (${dados.conta.bandeira}): ${dados.historico.length} registros`);
+                    
+                    dadosPorConta[contaId] = {
                         bandeira: dados.conta.bandeira,
+                        tipo: dados.conta.tipo || 'CORRENTE',
                         historico: {}
                     };
                     
                     dados.historico.forEach(h => {
                         datas.add(h.data);
-                        dadosPorConta[dados.conta.id].historico[h.data] = h.saldo;
+                        dadosPorConta[contaId].historico[h.data] = h.saldo;
                     });
                 });
                 
@@ -3275,13 +3458,23 @@
                 contasSelecionadas.forEach(contaId => {
                     if (!dadosPorConta[contaId]) {
                         const conta = mapaContas[contaId];
+                        console.log(`⚠️ Conta ${contaId} sem histórico, usando saldo manual:`, conta?.saldo_manual);
                         if (conta) {
                             dadosPorConta[contaId] = {
                                 bandeira: conta.bandeira,
+                                tipo: conta.tipo || 'CORRENTE',
                                 historico: {
                                     [hoje]: conta.saldo_manual
                                 }
                             };
+                            datas.add(hoje);
+                        }
+                    } else {
+                        // Se tem histórico, mas não tem dados para hoje, add o saldo_manual de hoje também
+                        const conta = mapaContas[contaId];
+                        if (conta && !dadosPorConta[contaId].historico[hoje]) {
+                            console.log(`ℹ️ Conta ${contaId} adiciona saldo de hoje:`, conta.saldo_manual);
+                            dadosPorConta[contaId].historico[hoje] = conta.saldo_manual;
                             datas.add(hoje);
                         }
                     }
@@ -3294,6 +3487,8 @@
                 
                 // Ordenar datas
                 const datasOrdenadas = Array.from(datas).sort();
+                console.log('📅 Datas encontradas:', datasOrdenadas.length, 'datas -', datasOrdenadas.slice(0, 5).join(', '));
+                console.log('🏦 Contas processadas:', Object.entries(dadosPorConta).map(([id, d]) => `[${id}] ${d.bandeira}`).join(', '));
                 
                 // Criar datasets para o gráfico
                 const cores = ['#7c3aed', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
@@ -3301,33 +3496,60 @@
                 
                 Object.entries(dadosPorConta).forEach(([contaId, dados], index) => {
                     const saldosPorData = datasOrdenadas.map(data => dados.historico[data] || null);
+                    console.log(`📈 Dataset conta ${contaId} (${dados.bandeira}): ${saldosPorData.length} pontos`, saldosPorData.slice(0, 3));
                     
                     datasets.push({
                         label: dados.bandeira,
                         data: saldosPorData,
                         borderColor: cores[index % cores.length],
-                        backgroundColor: cores[index % cores.length] + '20',
-                        borderWidth: 2,
+                        backgroundColor: cores[index % cores.length] + '15',
+                        borderWidth: 3,
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 4,
+                        pointRadius: 5,
                         pointBackgroundColor: cores[index % cores.length],
                         pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        pointHoverRadius: 6
+                        pointBorderWidth: 2.5,
+                        pointHoverRadius: 8,
+                        segment: {
+                            borderDash: []
+                        }
                     });
                 });
 
                 // Calcular saldo total consolidado por data
-                const saldoTotalPorData = datasOrdenadas.map(data => {
+                // IMPORTANTE: Interpolar valores para contas que não têm dados em todas as datas
+                const saldoTotalPorData = datasOrdenadas.map((data, idx) => {
                     let total = 0;
-                    Object.values(dadosPorConta).forEach(dados => {
-                        if (dados.historico[data] !== undefined) {
-                            total += dados.historico[data];
+                    let temDado = false;
+                    let detalhes = [];
+                    
+                    Object.entries(dadosPorConta).forEach(([contaId, dados]) => {
+                        let saldo = dados.historico[data];
+                        
+                        // Se não tem dado para esta data específica, usa última data válida anterior
+                        if (saldo === undefined) {
+                            for (let i = idx - 1; i >= 0; i--) {
+                                if (dados.historico[datasOrdenadas[i]] !== undefined) {
+                                    saldo = dados.historico[datasOrdenadas[i]];
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (saldo !== undefined) {
+                            total += saldo;
+                            temDado = true;
+                            detalhes.push(`${dados.bandeira}: ${saldo}`);
                         }
                     });
-                    return total;
+                    
+                    console.log(`💰 Data ${data}: Total = ${total} (${temDado ? 'com dados' : 'sem dados'})`, `[${detalhes.join(', ')}]`);
+                    return temDado ? total : null;
                 });
+                
+                console.log('📊 Totais consolidados (interpolados):', saldoTotalPorData);
+                console.log('📊 Contas no gráfico:', Object.keys(dadosPorConta).map(id => `${id}: ${dadosPorConta[id].bandeira}`));
 
                 // Adicionar dataset de saldo total consolidado
                 datasets.push({
@@ -3378,15 +3600,17 @@
                                 position: 'top',
                                 labels: {
                                     usePointStyle: true,
-                                    padding: 15,
-                                    font: { size: 13, weight: 'bold' }
+                                    padding: 20,
+                                    font: { size: 16, weight: 'bold' }
                                 }
                             },
                             tooltip: {
-                                backgroundColor: 'rgba(0,0,0,0.8)',
-                                padding: 12,
-                                titleFont: { size: 14 },
-                                bodyFont: { size: 13 },
+                                backgroundColor: 'rgba(0,0,0,0.9)',
+                                padding: 16,
+                                titleFont: { size: 16, weight: 'bold' },
+                                bodyFont: { size: 14 },
+                                borderColor: 'rgba(255,255,255,0.3)',
+                                borderWidth: 1,
                                 callbacks: {
                                     label: function(context) {
                                         return `${context.dataset.label}: R$ ${context.parsed.y ? context.parsed.y.toFixed(2) : 'N/A'}`;
@@ -3399,24 +3623,37 @@
                                 beginAtZero: false,
                                 ticks: {
                                     callback: function(value) {
-                                        return 'R$ ' + value.toFixed(2);
+                                        return 'R$ ' + value.toFixed(0);
                                     },
-                                    font: { size: 12 }
+                                    font: { size: 14, weight: 'bold' },
+                                    padding: 10
                                 },
                                 grid: {
-                                    color: 'rgba(0,0,0,0.05)'
+                                    color: 'rgba(0,0,0,0.08)',
+                                    lineWidth: 1.5
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Saldo (R$)',
+                                    font: { size: 14, weight: 'bold' }
                                 }
                             },
                             x: {
                                 ticks: {
-                                    font: { size: 11 },
-                                    autoSkip: datasOrdenadas.length > 10 ? true : false,
+                                    font: { size: 13, weight: '600' },
+                                    autoSkip: datasOrdenadas.length > 20 ? true : false,
                                     maxRotation: 45,
-                                    minRotation: 0
+                                    minRotation: 0,
+                                    padding: 8
                                 },
                                 grid: {
                                     display: true,
                                     color: 'rgba(0,0,0,0.05)'
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Data',
+                                    font: { size: 14, weight: 'bold' }
                                 }
                             }
                         }
