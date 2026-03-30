@@ -1,0 +1,177 @@
+================================================================================
+BACKUP DE CATEGORIAS E SUBCATEGORIAS
+Data: 29 de março de 2026
+Total de Categorias: 19 (18 DESPESA + 1 RECEITA)
+Total de Subcategorias: 115
+================================================================================
+
+1. ANIMAL_ESTIMAÇÃO (DESPESA) - 5 subcategorias
+   • Creche
+   • Pet Shop
+   • Ração
+   • Remédio
+   • Veterinario
+
+2. ALIMENTAÇÃO (DESPESA) - 9 subcategorias
+   • Almoco Trabalho
+   • Doces
+   • Feira
+   • Lanche
+   • paes
+   • Pastel
+   • Pizza
+   • Restaurante
+   • Supermercado
+
+3. CASA (DESPESA) - 13 subcategorias
+   • Brastemp
+   • Celular
+   • Cloud
+   • Comgas
+   • Complemento Mensal
+   • condominio
+   • Eletro Eletronicos
+   • Energia Eletrica
+   • Faxineira
+   • Internet
+   • IPTU
+   • Manutencao
+   • Seguro
+
+4. CUIDADOS_PESSOAIS (DESPESA) - 4 subcategorias
+   • Barba
+   • Cabelo
+   • Cosmeticos
+   • Perfume
+
+5. EDUCAÇÃO (DESPESA) - 7 subcategorias
+   • Curso
+   • Formatura
+   • Lanche
+   • material escolar
+   • Mensalidade
+   • Transporte
+   • Vestibular
+
+6. ELETRONICOS (DESPESA) - 3 subcategorias
+   • App
+   • Audio / Video
+   • pilhas
+
+7. EMPRESTIMOS (DESPESA) - 0 subcategorias
+   (sem subcategorias)
+
+8. TAXAS_IMPOSTOS (DESPESA) - 2 subcategorias
+   • Anuidade
+   • IOF
+
+9. INVESTIMENTO (DESPESA) - 7 subcategorias
+   • Açoes
+   • Capitalização
+   • CDB
+   • Previdencia Privada
+   • Renda Fixa
+   • Tesouro Direto
+   • Dólar
+
+10. JOGOS (DESPESA) - 3 subcategorias
+    • Aposta
+    • Loteria
+    • Rifa
+
+11. LAZER (DESPESA) - 12 subcategorias
+    • Academia
+    • Balada
+    • Bebida
+    • Churrasco
+    • Cinema
+    • Doces
+    • Festa
+    • Formatura
+    • Futebol
+    • Show
+    • Streaming
+    • Video game
+
+12. MESADA (DESPESA) - 2 subcategorias
+    • Gustavo
+    • Leonardo
+
+13. OUTROS (DESPESA) - 2 subcategorias
+    • Não sei
+    • Terceiros
+
+14. PRESENTES (DESPESA) - 9 subcategorias
+    • Aniversario
+    • Claudia
+    • Dia das maes
+    • Dia dos pais
+    • Eduardo
+    • Gustavo
+    • Leonardo
+    • Natal
+    • Outros
+
+15. SAUDE (DESPESA) - 6 subcategorias
+    • Convenio medico
+    • dentista
+    • estacionamento
+    • farmacia
+    • Oculos
+    • Suplementacao
+
+16. TRANSPORTE (DESPESA) - 13 subcategorias
+    • Acessorios Carro
+    • Aquisicao Veiculo
+    • Combustivel
+    • estacionamento
+    • garagem
+    • IPVA / Licenciamento
+    • Lavagem
+    • manutencao
+    • multas
+    • pedagio
+    • Seguro
+    • Transp Publico
+    • Uber
+
+17. VESTUARIO (DESPESA) - 5 subcategorias
+    • Claudia
+    • Eduardo
+    • Familia
+    • Gustavo
+    • Leonardo
+
+18. VIAGEM (DESPESA) - 16 subcategorias
+    • Alimentacao
+    • Animal Estimacao
+    • Carro
+    • Combustivel
+    • Dolar
+    • Farmacia
+    • Hospedagem
+    • Passagem
+    • Passeio
+    • pedagios
+    • pontos / milhas
+    • Passaporte
+    • Presentes
+    • Seguro
+    • salaVip
+    • Visto
+
+19. DEPOSITOS (RECEITA) - 6 subcategorias
+    • Cashback
+    • Férias
+    • PLR
+    • Rendimentos
+    • Salario
+    • Terceiros
+
+================================================================================
+RESUMO
+================================================================================
+Total de Categorias de DESPESA: 18
+Total de Categorias de RECEITA: 1
+Total de Subcategorias: 115
+================================================================================
