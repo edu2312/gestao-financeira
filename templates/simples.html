@@ -433,15 +433,30 @@
                 <div class="row">
                     <div>
                         <label>Tipo *</label>
-                        <select id="tipoTransacao" name="tipoTransacao" required>
+                        <select id="tipoTransacao" name="tipoTransacao" required onchange="atualizarCamposporTipo()">
                             <option value="">Selecione</option>
                             <option value="RECEITA">📈 Receita</option>
                             <option value="DESPESA" selected>📉 Despesa</option>
+                            <option value="TRANSFERENCIA">💸 Transferência</option>
                         </select>
                     </div>
                     <div>
                         <label>Valor *</label>
                         <input type="number" id="valorTransacao" name="valorTransacao" step="0.01" placeholder="0.00" required onfocus="this.value=''">
+                    </div>
+                </div>
+                <div class="row" id="campoContaOrigem" style="display:none;">
+                    <div>
+                        <label>Conta Origem *</label>
+                        <select id="contaOrigem" name="contaOrigem">
+                            <option value="">Selecione</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Conta Destino *</label>
+                        <select id="contaDestino" name="contaDestino">
+                            <option value="">Selecione</option>
+                        </select>
                     </div>
                 </div>
                 <div class="row">
@@ -1766,9 +1781,30 @@
             const ehRecorrente = document.getElementById('ehRecorrente').checked;
             const qtdRepeticoes = ehRecorrente ? parseInt(document.getElementById('qtdRepeticoes').value) : 0;
             
-            if (!dataVencimento || !tipoTransacao || !valor || !categoria || !descricao) {
-                alert('⚠️ Preencha todos os campos obrigatórios (marcados com *)!');
+            if (!dataVencimento || !tipoTransacao || !valor) {
+                alert('⚠️ Preencha data, tipo e valor!');
                 return;
+            }
+            
+            // Validações específicas por tipo
+            if (tipoTransacao === 'TRANSFERENCIA') {
+                const contaOrigemId = document.getElementById('contaOrigem').value;
+                const contaDestinoId = document.getElementById('contaDestino').value;
+                
+                if (!contaOrigemId || !contaDestinoId) {
+                    alert('⚠️ Selecione contas de origem e destino!');
+                    return;
+                }
+                
+                if (contaOrigemId === contaDestinoId) {
+                    alert('⚠️ Conta de origem e destino não podem ser iguais!');
+                    return;
+                }
+            } else {
+                if (!categoria || !descricao) {
+                    alert('⚠️ Preencha todos os campos obrigatórios (marcados com *)!');
+                    return;
+                }
             }
             
             if (ehRecorrente && (!qtdRepeticoes || qtdRepeticoes < 1)) {
@@ -1792,15 +1828,21 @@
                 valor: valor,
                 parcela: document.getElementById('parcela').value,
                 status: document.getElementById('status').value,
-                categoria: categoria,
+                categoria: tipoTransacao === 'TRANSFERENCIA' ? 'Transferência' : categoria,
                 subcategoria: document.getElementById('subcategoria').value,
                 tipo_custo: (document.getElementById('tipoCusto') ? document.getElementById('tipoCusto').value : 'VARIÁVEL'),
                 observacoes: document.getElementById('observacoes').value,
-                descricao: descricao,
+                descricao: tipoTransacao === 'TRANSFERENCIA' ? descricao || 'Transferência' : descricao,
                 eh_recorrente: ehRecorrente,
                 qtd_repeticoes: qtdRepeticoes,
                 total_parcelas: totalParcelas
             };
+            
+            // Adicionar IDs de contas para transferência
+            if (tipoTransacao === 'TRANSFERENCIA') {
+                payload.conta_origem_id = parseInt(document.getElementById('contaOrigem').value);
+                payload.conta_destino_id = parseInt(document.getElementById('contaDestino').value);
+            }
             
             console.log('📤 Payload:', payload);
             
@@ -1944,6 +1986,60 @@
                     console.log('✅ Contas carregadas:', html);
                 })
                 .catch(e => console.error('❌ Erro contas:', e));
+        }
+
+        function atualizarCamposporTipo() {
+            const tipoTransacao = document.getElementById('tipoTransacao').value;
+            const campoContaOrigem = document.getElementById('campoContaOrigem');
+            const divNomeConta = document.getElementById('divNomeConta');
+            const divSelectCartao = document.getElementById('divSelectCartao');
+            const divCategoria = document.querySelector('[style*="categoria"]')?.parentElement;
+            
+            console.log('📋 Tipo selecionado:', tipoTransacao);
+            
+            if (tipoTransacao === 'TRANSFERENCIA') {
+                // Mostrar campos de origem/destino, esconder categoria
+                campoContaOrigem.style.display = 'block';
+                if (divNomeConta) divNomeConta.style.display = 'none';
+                if (divSelectCartao) divSelectCartao.style.display = 'none';
+                
+                // Carregar contas permitidas (não cartão)
+                carregarContasTransferencia();
+                console.log('✅ Modo TRANSFERENCIA ativado');
+            } else {
+                // Mostrar campos normais
+                campoContaOrigem.style.display = 'none';
+                if (divNomeConta) divNomeConta.style.display = 'block';
+                
+                // Restaurar seletor de tipo de conta
+                const tipoConta = document.getElementById('tipoConta2').value;
+                if (tipoConta === 'CREDITO' && divSelectCartao) {
+                    divSelectCartao.style.display = 'block';
+                    divNomeConta.style.display = 'none';
+                }
+                console.log('✅ Modo normal (' + tipoTransacao + ') ativado');
+            }
+        }
+
+        function carregarContasTransferencia() {
+            console.log('💳 Carregando contas para transferência (sem cartão)...');
+            fetch('/api/contas')
+                .then(r => r.json())
+                .then(contas => {
+                    // Filtrar: apenas CORRENTE e INVESTIMENTO (não CARTAO)
+                    const contasPermitidas = contas.filter(c => c.tipo !== 'CARTAO');
+                    console.log('💳 Contas permitidas:', contasPermitidas);
+                    
+                    let html = '<option value="">Selecione</option>';
+                    contasPermitidas.forEach(c => {
+                        html += `<option value="${c.id}">${c.bandeira} (${c.tipo}) - Saldo: R$ ${parseFloat(c.saldo_manual).toFixed(2)}</option>`;
+                    });
+                    
+                    document.getElementById('contaOrigem').innerHTML = html;
+                    document.getElementById('contaDestino').innerHTML = html;
+                    console.log('✅ Contas de transferência carregadas');
+                })
+                .catch(e => console.error('❌ Erro ao carregar contas:', e));
         }
 
         function editarConta(id, nome, tipo, saldo) {

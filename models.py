@@ -10,9 +10,10 @@ class TipoTransacao(Enum):
     DEBITO = "DEBITO"
 
 class TipoConta(Enum):
-    """Tipo de conta: corrente ou cartão"""
+    """Tipo de conta: corrente, cartão ou investimento"""
     CORRENTE = "CORRENTE"
     CARTAO = "CARTAO"
+    INVESTIMENTO = "INVESTIMENTO"
 
 class StatusTransacao(Enum):
     """Status das transações"""

@@ -536,6 +536,32 @@ def api_criar_transacao():
             }), 201
         
         # Caso de transação simples (não parcelada)
+        # Validar tipo de transação
+        tipo_transacao = request.json['tipo']
+        if tipo_transacao not in ['RECEITA', 'DESPESA', 'TRANSFERENCIA']:
+            return jsonify({'erro': 'Tipo deve ser RECEITA, DESPESA ou TRANSFERENCIA'}), 400
+        
+        # Validar TRANSFERENCIA
+        if tipo_transacao == 'TRANSFERENCIA':
+            conta_origem_id = request.json.get('conta_origem_id')
+            conta_destino_id = request.json.get('conta_destino_id')
+            
+            if not conta_origem_id or not conta_destino_id:
+                return jsonify({'erro': 'TRANSFERENCIA requer conta_origem_id e conta_destino_id'}), 400
+            
+            if conta_origem_id == conta_destino_id:
+                return jsonify({'erro': 'Conta origem e destino não podem ser iguais'}), 400
+            
+            # Validar que ambas as contas existem e não são cartão de crédito
+            conta_origem = next((c for c in dados['contas'] if c['id'] == conta_origem_id), None)
+            conta_destino = next((c for c in dados['contas'] if c['id'] == conta_destino_id), None)
+            
+            if not conta_origem or not conta_destino:
+                return jsonify({'erro': 'Uma ou ambas as contas não foram encontradas'}), 404
+            
+            if conta_origem['tipo'] == 'CARTAO' or conta_destino['tipo'] == 'CARTAO':
+                return jsonify({'erro': 'Transferência não permitida com cartão de crédito'}), 400
+        
         nova_transacao = {
             'id': max([t['id'] for t in dados['transacoes']], default=0) + 1,
             'data_vencimento': request.json.get('data_vencimento', ''),
@@ -544,15 +570,17 @@ def api_criar_transacao():
             'tipo_conta': tipo_conta,
             'nome_conta': request.json.get('nome_conta', ''),
             'cartao_id': cartao_id,
-            'tipo': request.json['tipo'],
+            'tipo': tipo_transacao,
             'valor': float(request.json['valor']),
             'parcela': request.json.get('parcela', ''),
             'status': request.json.get('status', 'PREVISTO'),
-            'categoria': request.json['categoria'],
+            'categoria': request.json['categoria'] if tipo_transacao != 'TRANSFERENCIA' else 'Transferência',
             'subcategoria': request.json.get('subcategoria', ''),
             'tipo_custo': request.json.get('tipo_custo', 'VARIÁVEL'),
             'observacoes': request.json.get('observacoes', ''),
             'descricao': request.json.get('descricao', ''),
+            'conta_origem_id': request.json.get('conta_origem_id'),
+            'conta_destino_id': request.json.get('conta_destino_id'),
             'efetuada': False,
             'criada_em': datetime.now().isoformat()
         }
@@ -821,6 +849,41 @@ def api_efetivar_transacao(transacao_id):
             
             tipo_conta = transacao.get('tipo_conta', 'CORRENTE')
             
+            # Se for TRANSFERENCIA: debitar origem e creditar destino
+            if transacao['tipo'] == 'TRANSFERENCIA':
+                conta_origem_id = transacao.get('conta_origem_id')
+                conta_destino_id = transacao.get('conta_destino_id')
+                
+                if not conta_origem_id or not conta_destino_id:
+                    return jsonify({'erro': 'Transferência com contas inválidas'}), 400
+                
+                conta_origem = next((c for c in dados['contas'] if c['id'] == conta_origem_id), None)
+                conta_destino = next((c for c in dados['contas'] if c['id'] == conta_destino_id), None)
+                
+                if not conta_origem or not conta_destino:
+                    return jsonify({'erro': 'Uma ou ambas as contas não foram encontradas'}), 404
+                
+                # Verifica saldo da origem
+                if conta_origem['saldo_manual'] < transacao['valor']:
+                    return jsonify({'erro': f'Saldo insuficiente na conta {conta_origem["bandeira"]}'}), 400
+                
+                # Efetiva a transferência
+                conta_origem['saldo_manual'] -= transacao['valor']
+                conta_destino['saldo_manual'] += transacao['valor']
+                
+                transacao['efetuada'] = True
+                transacao['status'] = 'PAGO'
+                
+                print(f'✅ Transferência efetuada: {conta_origem["bandeira"]} → {conta_destino["bandeira"]}: R$ {transacao["valor"]}')
+                
+                salvar_dados(dados)
+                return jsonify({
+                    'transacao': transacao,
+                    'conta_origem': conta_origem,
+                    'conta_destino': conta_destino,
+                    'mensagem': f'Transferência de R$ {transacao["valor"]} realizada com sucesso'
+                }), 200
+            
             # Se for CRÉDITO: apenas marcar como efetuada (reconhecimento)
             if tipo_conta == 'CREDITO':
                 print(f'✅ Efetuando transação CRÉDITO ID {transacao_id} - apenas reconhecimento')
@@ -886,15 +949,30 @@ def api_deletar_transacao(transacao_id):
         
         # Se foi efetuada, reverte o saldo
         if transacao.get('efetuada', False):
-            nome_conta = transacao.get('nome_conta', '')
-            conta = next((c for c in dados['contas'] if c['bandeira'] == nome_conta), None)
-            
-            if conta:
-                # Reverte a operação (inverte a lógica)
-                if transacao['tipo'] == 'DESPESA':
-                    conta['saldo_manual'] += transacao['valor']  # Adiciona de volta (era despesa)
-                elif transacao['tipo'] == 'RECEITA':
-                    conta['saldo_manual'] -= transacao['valor']  # Remove (era receita)
+            # Se é transferência, reverter em ambas as contas
+            if transacao['tipo'] == 'TRANSFERENCIA':
+                conta_origem_id = transacao.get('conta_origem_id')
+                conta_destino_id = transacao.get('conta_destino_id')
+                
+                if conta_origem_id and conta_destino_id:
+                    conta_origem = next((c for c in dados['contas'] if c['id'] == conta_origem_id), None)
+                    conta_destino = next((c for c in dados['contas'] if c['id'] == conta_destino_id), None)
+                    
+                    if conta_origem and conta_destino:
+                        # Reverte a transferência (inverte os valores)
+                        conta_origem['saldo_manual'] += transacao['valor']  # Adiciona de volta
+                        conta_destino['saldo_manual'] -= transacao['valor']  # Remove
+            else:
+                # Reversão para RECEITA/DESPESA
+                nome_conta = transacao.get('nome_conta', '')
+                conta = next((c for c in dados['contas'] if c['bandeira'] == nome_conta), None)
+                
+                if conta:
+                    # Reverte a operação (inverte a lógica)
+                    if transacao['tipo'] == 'DESPESA':
+                        conta['saldo_manual'] += transacao['valor']  # Adiciona de volta (era despesa)
+                    elif transacao['tipo'] == 'RECEITA':
+                        conta['saldo_manual'] -= transacao['valor']  # Remove (era receita)
         
         # Se é transação de crédito, atualizar fatura
         if transacao.get('tipo_conta') == 'CREDITO' and transacao.get('cartao_id'):
