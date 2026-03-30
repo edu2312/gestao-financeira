@@ -863,9 +863,9 @@ def api_efetivar_transacao(transacao_id):
                 if not conta_origem or not conta_destino:
                     return jsonify({'erro': 'Uma ou ambas as contas não foram encontradas'}), 404
                 
-                # Verifica saldo da origem
-                if conta_origem['saldo_manual'] < transacao['valor']:
-                    return jsonify({'erro': f'Saldo insuficiente na conta {conta_origem["bandeira"]}'}), 400
+                # Permite saldo negativo em contas corrente - comentado
+                # if conta_origem['saldo_manual'] < transacao['valor']:
+                #     return jsonify({'erro': f'Saldo insuficiente na conta {conta_origem["bandeira"]}'}), 400
                 
                 # Efetiva a transferência
                 conta_origem['saldo_manual'] -= transacao['valor']

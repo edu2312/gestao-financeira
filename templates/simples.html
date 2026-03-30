@@ -483,6 +483,7 @@
                             <option value="Trabalho">💼 Trabalho</option>
                             <option value="Salário">💵 Salário</option>
                             <option value="Investimento">📊 Investimento</option>
+                            <option value="Transferência">💸 Transferência</option>
                             <option value="Outros">📦 Outros</option>
                         </select>
                     </div>
@@ -1334,6 +1335,7 @@
             
             // Atualizar categorias quando tipo de transação muda
             document.getElementById('tipoTransacao').onchange = function() {
+                atualizarCamposporTipo();
                 atualizarSelectsCategorias();
                 atualizarSubcategorias();
             };
@@ -1733,45 +1735,6 @@
         }
 
         function criarTransacao() {
-            // DEBUG DETALHADO
-            console.log('🔍 [criarTransacao] Verificando tipoCusto...');
-            const tipoCustoField = document.getElementById('tipoCusto');
-            console.log('🔍 [criarTransacao] tipoCusto elemento:', tipoCustoField);
-            if (!tipoCustoField) {
-                console.error('❌ ERRO CRÍTICO: Campo tipoCusto NÃO ENCONTRADO no DOM!');
-                console.log('📋 Campos disponíveis no formulário:');
-                const form = document.getElementById('formTransacao');
-                if (form) {
-                    const allInputs = form.querySelectorAll('input, select, textarea');
-                    allInputs.forEach(input => console.log(`  - ${input.id} (${input.tagName})`));
-                } else {
-                    console.error('❌ formTransacao também não encontrado!');
-                }
-                alert('❌ ERRO: Campo tipoCusto não encontrado. Recarregue a página!');
-                return;
-            }
-            
-            const tipoConta = document.getElementById('tipoConta2').value;
-            const cartaoId = tipoConta === 'CREDITO' ? document.getElementById('selectCartao').value : null;
-            const nomeConta = tipoConta === 'CREDITO' ? null : document.getElementById('nomeConta').value;
-            
-            console.log('📝 Criando transação:', { tipoConta, cartaoId, nomeConta });
-            
-            if (!tipoConta) {
-                alert('⚠️ Selecione o tipo de conta!');
-                return;
-            }
-            
-            if (tipoConta === 'CREDITO' && !cartaoId) {
-                alert('⚠️ Selecione um cartão!');
-                return;
-            }
-            
-            if (tipoConta === 'CORRENTE' && !nomeConta) {
-                alert('⚠️ Selecione uma conta!');
-                return;
-            }
-            
             const dataVencimento = document.getElementById('dataVencimento').value;
             const tipoTransacao = document.getElementById('tipoTransacao').value;
             const valor = parseFloat(document.getElementById('valorTransacao').value);
@@ -1786,10 +1749,16 @@
                 return;
             }
             
+            console.log('🔍 DEBUG criarTransacao:', { tipoTransacao, categoria, descricao, contaOrigem: document.getElementById('contaOrigem')?.value, contaDestino: document.getElementById('contaDestino')?.value });
+            
             // Validações específicas por tipo
+            let tipoConta, nomeConta, cartaoId;
+            
             if (tipoTransacao === 'TRANSFERENCIA') {
                 const contaOrigemId = document.getElementById('contaOrigem').value;
                 const contaDestinoId = document.getElementById('contaDestino').value;
+                
+                console.log('🔄 TRANSFERENCIA validando:', { contaOrigemId, contaDestinoId });
                 
                 if (!contaOrigemId || !contaDestinoId) {
                     alert('⚠️ Selecione contas de origem e destino!');
@@ -1801,8 +1770,28 @@
                     return;
                 }
             } else {
+                console.log('🔄 RECEITA/DESPESA validando:', { categoria, descricao });
                 if (!categoria || !descricao) {
                     alert('⚠️ Preencha todos os campos obrigatórios (marcados com *)!');
+                    return;
+                }
+                
+                tipoConta = document.getElementById('tipoConta2').value;
+                cartaoId = tipoConta === 'CREDITO' ? document.getElementById('selectCartao').value : null;
+                nomeConta = tipoConta === 'CREDITO' ? null : document.getElementById('nomeConta').value;
+                
+                if (!tipoConta) {
+                    alert('⚠️ Selecione o tipo de conta!');
+                    return;
+                }
+                
+                if (tipoConta === 'CREDITO' && !cartaoId) {
+                    alert('⚠️ Selecione um cartão!');
+                    return;
+                }
+                
+                if (tipoConta === 'CORRENTE' && !nomeConta) {
+                    alert('⚠️ Selecione uma conta!');
                     return;
                 }
             }
@@ -1821,24 +1810,28 @@
                 data_vencimento: dataVencimento,
                 data_transacao: document.getElementById('dataTransacao').value,
                 mes_pagamento: document.getElementById('mesPagamento').value,
-                tipo_conta: tipoConta,
-                nome_conta: nomeConta,
-                cartao_id: cartaoId ? parseInt(cartaoId) : null,
                 tipo: tipoTransacao,
                 valor: valor,
-                parcela: document.getElementById('parcela').value,
                 status: document.getElementById('status').value,
                 categoria: tipoTransacao === 'TRANSFERENCIA' ? 'Transferência' : categoria,
-                subcategoria: document.getElementById('subcategoria').value,
-                tipo_custo: (document.getElementById('tipoCusto') ? document.getElementById('tipoCusto').value : 'VARIÁVEL'),
-                observacoes: document.getElementById('observacoes').value,
                 descricao: tipoTransacao === 'TRANSFERENCIA' ? descricao || 'Transferência' : descricao,
                 eh_recorrente: ehRecorrente,
                 qtd_repeticoes: qtdRepeticoes,
                 total_parcelas: totalParcelas
             };
             
-            // Adicionar IDs de contas para transferência
+            // Campos específicos para RECEITA/DESPESA
+            if (tipoTransacao !== 'TRANSFERENCIA') {
+                payload.tipo_conta = tipoConta;
+                payload.nome_conta = nomeConta;
+                payload.cartao_id = cartaoId ? parseInt(cartaoId) : null;
+                payload.parcela = document.getElementById('parcela').value;
+                payload.subcategoria = document.getElementById('subcategoria').value;
+                payload.tipo_custo = (document.getElementById('tipoCusto') ? document.getElementById('tipoCusto').value : 'VARIÁVEL');
+                payload.observacoes = document.getElementById('observacoes').value;
+            }
+            
+            // IDs de contas para transferência
             if (tipoTransacao === 'TRANSFERENCIA') {
                 payload.conta_origem_id = parseInt(document.getElementById('contaOrigem').value);
                 payload.conta_destino_id = parseInt(document.getElementById('contaDestino').value);
@@ -2604,7 +2597,8 @@
                         categorias.forEach(cat => {
                             console.log('   Verificando:', cat.nome, '- tipo:', cat.tipo);
                             if ((tipoTransacao === 'RECEITA' && cat.tipo === 'RECEITA') ||
-                                (tipoTransacao === 'DESPESA' && cat.tipo === 'DESPESA')) {
+                                (tipoTransacao === 'DESPESA' && cat.tipo === 'DESPESA') ||
+                                (tipoTransacao === 'TRANSFERENCIA' && cat.tipo === 'TRANSFERENCIA')) {
                                 const opt = document.createElement('option');
                                 opt.value = cat.nome;
                                 opt.textContent = cat.nome;
@@ -2652,7 +2646,8 @@
                     if (categorias && categorias.length > 0) {
                         categorias.forEach(cat => {
                             if ((tipoTransacao === 'RECEITA' && cat.tipo === 'RECEITA') ||
-                                (tipoTransacao === 'DESPESA' && cat.tipo === 'DESPESA')) {
+                                (tipoTransacao === 'DESPESA' && cat.tipo === 'DESPESA') ||
+                                (tipoTransacao === 'TRANSFERENCIA' && cat.tipo === 'TRANSFERENCIA')) {
                                 const opt = document.createElement('option');
                                 opt.value = cat.nome;
                                 opt.textContent = cat.nome;
