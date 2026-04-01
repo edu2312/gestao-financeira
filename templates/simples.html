@@ -180,6 +180,82 @@
         .btn-deletar:hover { 
             box-shadow: 0 6px 15px rgba(239, 68, 68, 0.3);
         }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 700px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 30px;
+            position: relative;
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 22px;
+        }
+        
+        .modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .modal-close-btn:hover {
+            background: #dc2626;
+        }
         table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -572,11 +648,12 @@
                     
                     <!-- Status -->
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">Status</label>
-                        <select id="filtroStatusAvancado" onchange="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
-                            <option value="">Todos</option>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 5px; color: #555;">Status (múltiplos)</label>
+                        <select id="filtroStatusAvancado" multiple onchange="aplicarFiltrosAvancados()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; min-height: 100px;">
                             <option value="PAGO">✅ Pago</option>
-                            <option value="PENDENTE">⏳ Pendente</option>
+                            <option value="PREVISTO">⏳ Previsto</option>
+                            <option value="AGENDADO">📅 Agendado</option>
+                            <option value="REC_PENDENTE">⏳ Recebimento Pendente</option>
                         </select>
                     </div>
                 </div>
@@ -610,17 +687,16 @@
                     <tr>
                         <th class="sortable" data-sort="data_vencimento" style="cursor: pointer; user-select: none;">Data <span class="sort-indicator">↕️</span></th>
                         <th>Tipo</th>
-                        <th>Categoria</th>
-                        <th>Subcategoria</th>
                         <th class="sortable" data-sort="nome_conta" style="cursor: pointer; user-select: none;">Conta <span class="sort-indicator">↕️</span></th>
                         <th>Status</th>
                         <th>Parcela</th>
                         <th>Valor</th>
+                        <th>Descrição</th>
                         <th>Ação</th>
                     </tr>
                 </thead>
                 <tbody id="transacoes">
-                    <tr><td colspan="9" style="text-align:center; color:#999;">Carregando...</td></tr>
+                    <tr><td colspan="8" style="text-align:center; color:#999;">Carregando...</td></tr>
                 </tbody>
             </table>
         </section>
@@ -648,6 +724,118 @@
                 </tbody>
             </table>
         </section>
+
+        <!-- EDITAR TRANSACAO - MODAL -->
+        <div id="modalEditarTransacao" class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>✏️ Editar Transação</h2>
+                    <button class="modal-close-btn" onclick="fecharModalEdicao()" aria-label="Fechar">×</button>
+                </div>
+                <form id="formEditarTransacao">
+                    <div class="row">
+                        <div>
+                            <label>Data Vencimento *</label>
+                            <input type="date" id="editarDataVencimento" required onchange="atualizarMesPagamentoEditar()">
+                        </div>
+                        <div>
+                            <label>Data Transação (Compra / Crédito)</label>
+                            <input type="date" id="editarDataTransacao">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Mês Pagamento (mm/aaaa)</label>
+                            <input type="text" id="editarMesPagamento" placeholder="03/2026">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Tipo Conta *</label>
+                            <select id="editarTipoConta" required onchange="atualizarEditarSelectConta()">
+                                <option value="">Selecione</option>
+                                <option value="CORRENTE">💳 Corrente</option>
+                                <option value="CREDITO">💰 Crédito</option>
+                                <option value="INVESTIMENTO">📈 Investimento</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Nome Conta *</label>
+                            <select id="editarNomeConta" required>
+                                <option value="">Selecione</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Tipo *</label>
+                            <select id="editarTipo" required>
+                                <option value="">Selecione</option>
+                                <option value="RECEITA">📈 Receita</option>
+                                <option value="DESPESA">📉 Despesa</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Valor *</label>
+                            <input type="number" id="editarValor" step="0.01" required onfocus="this.value=''">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Parcela</label>
+                            <input type="text" id="editarParcela" placeholder="ROT, 1/3...">
+                        </div>
+                        <div>
+                            <label>Status</label>
+                            <select id="editarStatus">
+                                <option value="PREVISTO">⏰ Previsto</option>
+                                <option value="AGENDADO">📅 Agendado</option>
+                                <option value="PAGO">✅ Pago</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Categoria *</label>
+                            <select id="editarCategoria" required>
+                                <option value="">Selecione</option>
+                                <option value="Alimentação">🍽️ Alimentação</option>
+                                <option value="Transporte">🚗 Transporte</option>
+                                <option value="Trabalho">💼 Trabalho</option>
+                                <option value="Salário">💵 Salário</option>
+                                <option value="Investimento">📊 Investimento</option>
+                                <option value="Outros">📦 Outros</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Subcategoria</label>
+                            <select id="editarSubcategoria">
+                                <option value="">Selecione</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Tipo Custo</label>
+                            <select id="editarTipoCusto">
+                                <option value="VARIÁVEL">📊 Variável</option>
+                                <option value="FIXO">🔒 Fixo</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Descrição *</label>
+                            <input type="text" id="editarDescricao" required>
+                        </div>
+                    </div>
+                    <label>Observações</label>
+                    <textarea id="editarObservacoes" style="min-height:80px;"></textarea>
+                    <div class="row">
+                        <button type="submit">💾 Salvar</button>
+                        <button type="button" onclick="fecharModalEdicao()" style="background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">❌ Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <!-- EDITAR TRANSACAO -->
         <section id="editarTransacaoSection" style="display:none;">
@@ -832,7 +1020,7 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 15px; align-items: end;">
                 <div>
                     <label style="color: white; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Conta</label>
-                    <select id="selectContaRegistro" style="padding: 10px 12px; border: none; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box; height: 42px;">
+                    <select id="selectContaRegistro" onchange="preencherSaldoAtualConta()" style="padding: 10px 12px; border: none; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box; height: 42px;">
                         <option value="">Selecione uma conta</option>
                     </select>
                 </div>
@@ -852,6 +1040,36 @@
 
         <!-- PÁGINA ADMIN -->
         <div id="pagina-admin" class="pagina">
+
+        <!-- CICLO DE REFERÊNCIA -->
+        <div class="secao-colapsavel">
+            <div class="secao-header" onclick="toggleSecao(this)">
+                <h2>📅 Ciclo de Referência para Saldo Projetado</h2>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="secao-conteudo">
+                <div style="background: #f0f4f8; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                    <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Defina o período para cálculo de receitas e despesas pendentes. Esses valores serão usados no Saldo Projetado da aba principal.</p>
+                    <div class="row">
+                        <div>
+                            <label>Início do Ciclo *</label>
+                            <input type="date" id="inicioCiclo" required>
+                        </div>
+                        <div>
+                            <label>Final do Ciclo *</label>
+                            <input type="date" id="finalCiclo" required>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top: 15px;">
+                        <button type="button" onclick="salvarCicloReferencia()" style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">💾 Salvar Ciclo</button>
+                        <div id="msgCicloSalvo" style="margin-left: 15px; color: #16a34a; font-weight: 600; display: none;">✅ Ciclo salvo com sucesso!</div>
+                    </div>
+                    <div id="cicloAtualInfo" style="margin-top: 15px; padding: 12px; background: white; border-left: 4px solid #0ea5e9; border-radius: 4px; color: #2c3e50;">
+                        📌 Ciclo atual: <strong id="cicloAtualTexto">Não configurado</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- CATEGORIAS E SUBCATEGORIAS -->
         <div class="secao-colapsavel">
@@ -936,26 +1154,28 @@
             </div>
         </div>
 
-        <!-- EDITAR CONTA -->
-        <section id="editarContaSection" style="display:none;">
-            <h2>✏️ Editar Conta</h2>
-            <form id="formEditarConta">
-                <label>Nome *</label>
-                <input type="text" id="editarNome" required>
-                <label>Tipo *</label>
-                <select id="editarTipoContaSelect" required>
-                    <option value="CORRENTE">💳 Corrente</option>
-                    <option value="CREDITO">💰 Crédito</option>
-                    <option value="INVESTIMENTO">📈 Investimento</option>
-                </select>
-                <label>Saldo *</label>
-                <input type="number" id="editarSaldo" step="0.01" required>
-                <div class="row">
-                    <button type="submit">💾 Salvar</button>
-                    <button type="button" onclick="cancelarEditar()" style="background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">❌ Cancelar</button>
-                </div>
-            </form>
-        </section>
+        <!-- MODAL EDITAR CONTA -->
+        <div id="modalEditarConta" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center; display:none;">
+            <div style="background:white; padding:30px; border-radius:15px; box-shadow:0 10px 40px rgba(0,0,0,0.3); width:90%; max-width:500px; max-height:90vh; overflow-y:auto;">
+                <h2 style="margin-top:0; text-align:center;">✏️ Editar Conta</h2>
+                <form id="formEditarConta">
+                    <label>Nome *</label>
+                    <input type="text" id="editarNome" required>
+                    <label>Tipo *</label>
+                    <select id="editarTipoContaSelect" required>
+                        <option value="CORRENTE">💳 Corrente</option>
+                        <option value="CREDITO">💰 Crédito</option>
+                        <option value="INVESTIMENTO">📈 Investimento</option>
+                    </select>
+                    <label>Saldo *</label>
+                    <input type="number" id="editarSaldo" step="0.01" required>
+                    <div class="row" style="margin-top:20px;">
+                        <button type="submit">💾 Salvar</button>
+                        <button type="button" onclick="cancelarEditar()" style="background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">❌ Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <!-- CARTÕES DE CRÉDITO -->
         <div class="secao-colapsavel">
@@ -969,28 +1189,14 @@
                     <h3 style="color: #2c3e50; margin-bottom: 15px; font-size: 16px;">➕ Novo Cartão</h3>
                     <form id="formNovoCartao">
                         <div class="row">
-                            <div>
+                            <div style="flex: 1;">
                                 <label>Bandeira *</label>
                                 <input type="text" id="novoCartaoBandeira" placeholder="Ex: Visa, Mastercard..." required>
                             </div>
-                            <div>
-                                <label>Últimos Dígitos</label>
-                                <input type="text" id="novoCartaoDigitos" placeholder="Ex: 1234" maxlength="4">
+                            <div style="flex: 1;">
+                                <label>Dia de Vencimento *</label>
+                                <input type="number" id="novoCartaoDiaVencimento" min="1" max="31" placeholder="Ex: 10" required>
                             </div>
-                        </div>
-                        <div class="row">
-                            <div>
-                                <label>Limite de Crédito</label>
-                                <input type="number" id="novoCartaoLimite" placeholder="0.00" step="0.01">
-                            </div>
-                            <div>
-                                <label>Data de Fechamento *</label>
-                                <input type="date" id="novoCartaoDataFechamento" required>
-                            </div>
-                        </div>
-                        <div>
-                            <label>Data de Vencimento *</label>
-                            <input type="date" id="novoCartaoDataVencimento" required>
                         </div>
                         <button type="submit">✅ Criar Cartão</button>
                     </form>
@@ -1013,6 +1219,26 @@
                 <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
                     <p style="margin: 0; color: #2e7d32; font-size: 14px;"><strong>ℹ️ As faturas são geradas automaticamente</strong></p>
                     <p style="margin: 8px 0 0 0; color: #558b2f; font-size: 13px;">Crie transações de crédito e as faturas serão criadas/atualizadas automaticamente com o total acumulado.</p>
+                </div>
+
+                <!-- Filtros de Faturas -->
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; border: 1px solid #ddd;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #333;">Filtrar por Cartão:</label>
+                        <select id="filtroFaturasCartao" onchange="aplicarFiltrosFaturas()" style="width: 180px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #333;">Filtrar por Status:</label>
+                        <select id="filtroFaturasStatus" onchange="aplicarFiltrosFaturas()" style="width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            <option value="">Todos</option>
+                            <option value="aberta">🟠 Aberta</option>
+                            <option value="fechada">🟣 Fechada</option>
+                            <option value="paga">🟢 Paga</option>
+                        </select>
+                    </div>
+                    <button onclick="limparFiltrosFaturas()" style="padding: 8px 15px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">🔄 Limpar Filtros</button>
                 </div>
 
                 <!-- Listagem de Faturas -->
@@ -1105,16 +1331,20 @@
         let dataFinalFiltro = null;
         let filtroContaDespesas = null;  // Filtro de conta para despesas
         let mapaCartoes = {};  // Mapa global para traducao de cartao_id -> bandeira
+        let contasParaSaldo = [];  // Armazena contas para preencher saldo automaticamente
         
         // FILTROS AVANÇADOS
         let filtrosAtivos = {
             tipo: '',
             categoria: '',
-            status: '',
+            status: [],
             conta: '',
             busca: ''
         };
         let transacoesOriginais = [];  // Cópia original para aplicar filtros
+        
+        let faturasOriginais = [];  // Cópia original das faturas para aplicar filtros
+        let filtrosFaturas = { cartao: '', status: '' };  // Filtros ativos de faturas
         
         let sortTransacoes = { campo: 'data_vencimento', direcao: 'asc' };  // Ordenação: campo e direção
 
@@ -1189,25 +1419,44 @@
                 })
                 .catch(e => console.error('❌ Erro ao carregar categorias:', e));
             
-            // Contas
-            fetch('/api/contas')
-                .then(r => r.json())
-                .then(contas => {
-                    const select = document.getElementById('filtroContaAvancado');
-                    let html = '<option value="">Todas</option>';
-                    contas.forEach(conta => {
-                        html += `<option value="${conta.bandeira}">${conta.bandeira} (${conta.tipo})</option>`;
-                    });
-                    select.innerHTML = html;
-                })
-                .catch(e => console.error('❌ Erro ao carregar contas:', e));
+            // Contas e Cartões
+            Promise.all([
+                fetch('/api/contas').then(r => r.json()),
+                fetch('/api/cartoes').then(r => r.json())
+            ])
+            .then(([contas, cartoes]) => {
+                const select = document.getElementById('filtroContaAvancado');
+                let html = '<option value="">Todas</option>';
+                
+                // Adicionar contas correntes
+                contas.forEach(conta => {
+                    html += `<option value="conta_${conta.bandeira}" style="color: #0066cc;">💳 ${conta.bandeira} (${conta.tipo})</option>`;
+                });
+                
+                // Separador visual
+                html += '<option value="" disabled style="border-top: 1px solid #ccc;">────────</option>';
+                
+                // Adicionar cartões de crédito
+                cartoes.forEach(cartao => {
+                    if (cartao.status === 'ATIVO') {
+                        html += `<option value="cartao_${cartao.id}" style="color: #e67e22;">💰 ${cartao.bandeira} (${cartao.ultimos_digitos}) - Crédito</option>`;
+                    }
+                });
+                
+                select.innerHTML = html;
+            })
+            .catch(e => console.error('❌ Erro ao carregar contas/cartões:', e));
         }
         
         function aplicarFiltrosAvancados() {
             // Pega valores dos campos
             filtrosAtivos.tipo = document.getElementById('filtroTipoTransacao').value;
             filtrosAtivos.categoria = document.getElementById('filtroCategoriaAvancado').value;
-            filtrosAtivos.status = document.getElementById('filtroStatusAvancado').value;
+            
+            // Para status, pega múltiplos valores selecionados
+            const selectStatus = document.getElementById('filtroStatusAvancado');
+            filtrosAtivos.status = Array.from(selectStatus.selectedOptions).map(opt => opt.value);
+            
             filtrosAtivos.conta = document.getElementById('filtroContaAvancado').value;
             filtrosAtivos.busca = document.getElementById('filtroBuscaDescricao').value.toLowerCase();
             
@@ -1226,11 +1475,21 @@
                 // Filtro por categoria
                 if (filtrosAtivos.categoria && t.categoria !== filtrosAtivos.categoria) return false;
                 
-                // Filtro por status
-                if (filtrosAtivos.status && t.status !== filtrosAtivos.status) return false;
+                // Filtro por status (agora é um array de status selecionados)
+                if (filtrosAtivos.status && filtrosAtivos.status.length > 0 && !filtrosAtivos.status.includes(t.status)) return false;
                 
-                // Filtro por conta
-                if (filtrosAtivos.conta && t.nome_conta !== filtrosAtivos.conta) return false;
+                // Filtro por conta (correntes ou cartões de crédito)
+                if (filtrosAtivos.conta) {
+                    if (filtrosAtivos.conta.startsWith('conta_')) {
+                        // Filtro por conta corrente
+                        const bandeira = filtrosAtivos.conta.replace('conta_', '');
+                        if (t.nome_conta !== bandeira) return false;
+                    } else if (filtrosAtivos.conta.startsWith('cartao_')) {
+                        // Filtro por cartão de crédito
+                        const cartaoId = parseInt(filtrosAtivos.conta.replace('cartao_', ''));
+                        if (t.cartao_id !== cartaoId) return false;
+                    }
+                }
                 
                 // Filtro por descrição (busca)
                 if (filtrosAtivos.busca && !t.descricao.toLowerCase().includes(filtrosAtivos.busca)) return false;
@@ -1249,40 +1508,45 @@
             // Renderiza na tabela
             const tbody = document.getElementById('transacoes');
             if (transacoesFiltradas.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#999;">Nenhuma transação encontrada com esses filtros</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">Nenhuma transação encontrada com esses filtros</td></tr>';
                 return;
             }
             
-            tbody.innerHTML = transacoesFiltradas.map(t => `
+            tbody.innerHTML = transacoesFiltradas.map(t => {
+                const mostiarBotaoEfetivar = !t.efetuada;
+                console.log(`Transação ${t.id}: status="${t.status}", efetuada=${t.efetuada}, botão=${mostiarBotaoEfetivar}`);
+                return `
                 <tr>
                     <td>${t.data_vencimento}</td>
                     <td>${t.tipo === 'RECEITA' ? '📈' : t.tipo === 'DESPESA' ? '📉' : '💸'} ${t.tipo}</td>
-                    <td>${t.categoria}</td>
-                    <td>${t.subcategoria || '-'}</td>
                     <td>${t.nome_conta || t.cartao_id || '-'}</td>
-                    <td>${t.status === 'PAGO' ? '✅' : '⏳'} ${t.status || '-'}</td>
+                    <td>${t.efetuada ? '✅' : '⏳'} ${t.status || '-'}</td>
                     <td>${t.parcela || '-'}</td>
                     <td>R$ ${parseFloat(t.valor).toFixed(2)}</td>
+                    <td style="max-width: 200px; word-wrap: break-word;">${t.descricao || '-'}</td>
                     <td>
-                        <button onclick="abrirEdicaoTransacao(${t.id})" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">✏️</button>
+                        ${mostiarBotaoEfetivar ? `<button onclick="efetivarTransacao(${t.id})" style="padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;">✅ Efetivar</button>` : ''}
+                        <button onclick="abrirEditarTransacao(${t.id})" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">✏️</button>
                         <button onclick="deletarTransacao(${t.id})" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️</button>
                     </td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
         }
         
         function limparFiltrosAvancados() {
             // Limpa todos os filtros
             document.getElementById('filtroTipoTransacao').value = '';
             document.getElementById('filtroCategoriaAvancado').value = '';
-            document.getElementById('filtroStatusAvancado').value = '';
+            // Limpar múltiplas seleções de status
+            Array.from(document.getElementById('filtroStatusAvancado').options).forEach(opt => opt.selected = false);
             document.getElementById('filtroContaAvancado').value = '';
             document.getElementById('filtroBuscaDescricao').value = '';
             
             filtrosAtivos = {
                 tipo: '',
                 categoria: '',
-                status: '',
+                status: [],
                 conta: '',
                 busca: ''
             };
@@ -1332,6 +1596,39 @@
 
         function iniciar() {
             console.log('Iniciando...');
+            
+            // Inicializar ciclo padrão se não existir
+            const cicloPrecio = localStorage.getItem('cicloReferencia');
+            if (!cicloPrecio) {
+                // Ciclo padrão: 29 do mês anterior até 29 do mês atual  
+                const hoje = new Date();
+                const diaHoje = hoje.getDate();
+                let dataInicio, dataFim;
+                
+                if (diaHoje >= 29) {
+                    // Se já passamos do dia 29, iniciar am 29 do mês passado
+                    const mesPass = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 29);
+                    const mesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 29);
+                    dataInicio = mesPass.toISOString().split('T')[0];
+                    dataFim = mesAtual.toISOString().split('T')[0];
+                } else {
+                    // Se ainda não chegou a 29, usar o mês passado
+                    const mesPass2 = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 29);
+                    const mesAtual2 = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 28);
+                    dataInicio = new Date(mesPass2.getFullYear(), mesPass2.getMonth() - 1, 29).toISOString().split('T')[0];
+                    dataFim = mesPass2.toISOString().split('T')[0];
+                }
+                
+                // Para TESTE: usar ciclo fixo de 2026-03-29 a 2026-04-29
+                dataInicio = '2026-03-29';
+                dataFim = '2026-04-29';
+                
+                const cicloPadrao = { inicio: dataInicio, fim: dataFim };
+                localStorage.setItem('cicloReferencia', JSON.stringify(cicloPadrao));
+                console.log('[INIT] Ciclo padrão criado:', cicloPadrao);
+            }
+            
+            carregarCicloReferencia();
             carregarResumo();
             carregarContas();
             carregarContasFormulario();
@@ -1514,6 +1811,7 @@
         function configurarDatas() {
             const data = new Date().toISOString().split('T')[0];
             document.getElementById('dataVencimento').value = data;
+            document.getElementById('dataTransacao').value = data;
             
             const hoje = new Date();
             const mes = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -1613,32 +1911,80 @@
         
         function calcularSaldoProjetado() {
             return new Promise((resolve) => {
+                // Obter ciclo de referência
+                const ciclo = obterCicloReferencia();
+                let url = '/api/resumo';
+                
+                if (ciclo.inicio && ciclo.fim) {
+                    url += `?data_inicio=${ciclo.inicio}&data_fim=${ciclo.fim}`;
+                }
+                
+                console.log('[DEBUG] calcularSaldoProjetado URL:', url);
+                
                 Promise.all([
-                    fetch('/api/resumo').then(r => r.json()),
-                    fetch('/api/contas').then(r => r.json())
+                    fetch(url).then(r => {
+                        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                        return r.json();
+                    }),
+                    fetch('/api/contas').then(r => {
+                        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                        return r.json();
+                    })
                 ])
                 .then(([resumo, contas]) => {
+                    console.log('[DEBUG] calcularSaldoProjetado - resumo:', resumo);
                     // Saldo Atual
                     let saldoAtual = 0;
                     contas.forEach(c => {
                         saldoAtual += parseFloat(c.saldo_manual);
                     });
                     
-                    // Saldo Projetado = Saldo Atual + Receitas Pendentes - Despesas Pendentes
-                    const saldoProjetado = saldoAtual + resumo.receitas_pendentes - resumo.despesas_pendentes;
+                    // Sempre usar APENAS pendentes (sem efetivadas)
+                    const receitas = resumo.receitas_pendentes;
+                    const despesas = resumo.despesas_pendentes;
+                    
+                    // Saldo Projetado = Saldo Atual + Receitas no Período - Despesas no Período
+                    const saldoProjetado = saldoAtual + receitas - despesas;
+                    console.log('[DEBUG] Saldo Projetado:', saldoProjetado, '(', saldoAtual, '+', receitas, '-', despesas, ')');
                     resolve(saldoProjetado);
-                });
+                })
+                .catch(e => console.error('[DEBUG] Erro em calcularSaldoProjetado:', e));
             });
         }
         
         function carregarResumo() {
-            // Buscar resumo incluindo receitas e despesas pendentes
-            fetch('/api/resumo')
-                .then(r => r.json())
+            // Obter ciclo de referência
+            const ciclo = obterCicloReferencia();
+            let url = '/api/resumo';
+            
+            if (ciclo.inicio && ciclo.fim) {
+                url += `?data_inicio=${ciclo.inicio}&data_fim=${ciclo.fim}`;
+            }
+            
+            console.log('[DEBUG] carregarResumo URL:', url, 'Ciclo:', ciclo);
+            
+            // Buscar resumo incluindo receitas e despesas
+            fetch(url)
+                .then(r => {
+                    console.log('[DEBUG] Resumo response status:', r.status);
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                })
                 .then(resumo => {
-                    document.getElementById('v-receita-pendente').textContent = 'R$ ' + resumo.receitas_pendentes.toFixed(2);
-                    document.getElementById('v-despesa-pendente').textContent = 'R$ ' + resumo.despesas_pendentes.toFixed(2);
-                });
+                    console.log('[DEBUG] Resumo data:', resumo);
+                    const elemRecPendente = document.getElementById('v-receita-pendente');
+                    const elemDesPendente = document.getElementById('v-despesa-pendente');
+                    
+                    // Mostrar APENAS pendentes (sem efetivadas)
+                    const receitas = resumo.receitas_pendentes;
+                    const despesas = resumo.despesas_pendentes;
+                    
+                    if (elemRecPendente) elemRecPendente.textContent = 'R$ ' + receitas.toFixed(2);
+                    if (elemDesPendente) elemDesPendente.textContent = 'R$ ' + despesas.toFixed(2);
+                    
+                    console.log('[DEBUG] Receitas exibidas:', receitas, 'Despesas exibidas:', despesas);
+                })
+                .catch(e => console.error('[DEBUG] Erro ao carregar resumo:', e));
             
             fetch('/api/transacoes')
                 .then(r => r.json())
@@ -2250,13 +2596,19 @@
             inputSaldo.value = String(parseFloat(saldo) || 0);
             console.log('   Saldo:', inputSaldo.value);
             
-            // Mostrar formulário
-            document.getElementById('editarContaSection').style.display = 'block';
-            console.log('✅ Formulário pronto');
+            // Abrir modal
+            const modal = document.getElementById('modalEditarConta');
+            modal.style.display = 'flex';
+            console.log('✅ Modal aberto');
+            
+            // Fechar ao clicar fora do modal
+            modal.onclick = (e) => {
+                if (e.target === modal) cancelarEditar();
+            };
         }
 
         function cancelarEditar() {
-            document.getElementById('editarContaSection').style.display = 'none';
+            document.getElementById('modalEditarConta').style.display = 'none';
             contaSelecionadaId = null;
         }
 
@@ -2496,7 +2848,7 @@
                             });
                     }
                     
-                    document.getElementById('editarTransacaoSection').style.display = 'block';
+                    document.getElementById('modalEditarTransacao').classList.add('active');
                 })
                 .catch(e => alert('Erro: ' + e));
         }
@@ -2505,6 +2857,26 @@
             document.getElementById('editarTransacaoSection').style.display = 'none';
             transacaoEditandoId = null;
         }
+
+        function fecharModalEdicao() {
+            document.getElementById('modalEditarTransacao').classList.remove('active');
+            transacaoEditandoId = null;
+        }
+
+        // Fechar modal ao clicar fora do conteúdo
+        document.addEventListener('click', function(event) {
+            const modal = document.getElementById('modalEditarTransacao');
+            if (event.target === modal) {
+                fecharModalEdicao();
+            }
+        });
+
+        // Fechar modal ao pressionar Escape
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                fecharModalEdicao();
+            }
+        });
 
         document.getElementById('formEditarTransacao').onsubmit = function(e) {
             e.preventDefault();
@@ -2549,6 +2921,7 @@
                 if (r.ok) {
                     alert('✅ Transação editada com sucesso!');
                     cancelarEditarTransacao();
+                    fecharModalEdicao();
                     carregarTransacoes();
                     carregarFaturas();
                     calcularSaldoProjetado();
@@ -2976,7 +3349,66 @@
             icon.classList.toggle('expandido');
         }
 
-        // ========== CARTÕES DE CRÉDITO ==========
+        // ========== CICLO DE REFERÊNCIA ==========
+
+        function carregarCicloReferencia() {
+            const ciclo = JSON.parse(localStorage.getItem('cicloReferencia') || '{"inicio": null, "fim": null}');
+            console.log('[DEBUG] carregarCicloReferencia - ciclo:', ciclo);
+            
+            const inicioCicloElem = document.getElementById('inicioCiclo');
+            const finalCicloElem = document.getElementById('finalCiclo');
+            const cicloTextoElem = document.getElementById('cicloAtualTexto');
+            
+            if (inicioCicloElem) inicioCicloElem.value = ciclo.inicio || '';
+            if (finalCicloElem) finalCicloElem.value = ciclo.fim || '';
+            
+            if (ciclo.inicio && ciclo.fim && cicloTextoElem) {
+                const dataInicio = new Date(ciclo.inicio);
+                const dataFim = new Date(ciclo.fim);
+                cicloTextoElem.textContent = 
+                    `${dataInicio.toLocaleDateString('pt-BR')} até ${dataFim.toLocaleDateString('pt-BR')}`;
+            } else if (cicloTextoElem) {
+                cicloTextoElem.textContent = 'Não configurado';
+            }
+        }
+
+        function salvarCicloReferencia() {
+            const inicio = document.getElementById('inicioCiclo').value;
+            const fim = document.getElementById('finalCiclo').value;
+            
+            if (!inicio || !fim) {
+                alert('⚠️ Preencha tanto a data de início quanto a de fim!');
+                return;
+            }
+            
+            if (new Date(inicio) > new Date(fim)) {
+                alert('⚠️ A data de início não pode ser maior que a data de fim!');
+                return;
+            }
+            
+            const ciclo = { inicio, fim };
+            localStorage.setItem('cicloReferencia', JSON.stringify(ciclo));
+            
+            // Mostrar mensagem de sucesso
+            const msg = document.getElementById('msgCicloSalvo');
+            msg.style.display = 'inline-block';
+            setTimeout(() => { msg.style.display = 'none'; }, 3000);
+            
+            // Atualizar exibição
+            const dataInicio = new Date(inicio);
+            const dataFim = new Date(fim);
+            document.getElementById('cicloAtualTexto').textContent = 
+                `${dataInicio.toLocaleDateString('pt-BR')} até ${dataFim.toLocaleDateString('pt-BR')}`;
+            
+            // Recalcular saldo projetado
+            carregarResumo();
+        }
+
+        function obterCicloReferencia() {
+            return JSON.parse(localStorage.getItem('cicloReferencia') || '{"inicio": null, "fim": null}');
+        }
+
+        // ========== CARTÕES DE CRÉDITO ===========
 
         function carregarCartoes() {
             fetch('/api/cartoes')
@@ -2990,10 +3422,7 @@
                                 <h4 style="margin: 0; font-size: 16px; color: #2c3e50;">${c.bandeira}</h4>
                                 <span style="background: ${statusColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${c.status}</span>
                             </div>
-                            <p style="margin: 5px 0; color: #666; font-size: 14px;">Dígitos: ${c.ultimos_digitos || 'N/A'}</p>
-                            <p style="margin: 5px 0; color: #666; font-size: 14px;">Limite: R$ ${c.limite_credito.toFixed(2)}</p>
-                            <p style="margin: 5px 0; color: #666; font-size: 14px;">Fechamento: ${c.data_fechamento}</p>
-                            <p style="margin: 5px 0; color: #666; font-size: 14px;">Vencimento: ${c.data_vencimento}</p>
+                            <p style="margin: 5px 0; color: #e67e22; font-size: 14px;"><strong>Vencimento: dia ${c.dia_vencimento}</strong></p>
                             <div style="margin-top: 10px; display: flex; gap: 8px;">
                                 <button onclick="editarCartao(${c.id})" style="flex: 1; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">✏️ Editar</button>
                                 <button onclick="deletarCartao(${c.id})" style="flex: 1; padding: 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ Deletar</button>
@@ -3010,7 +3439,6 @@
             fetch('/api/faturas')
                 .then(r => r.json())
                 .then(faturas => {
-                    let html = '';
                     const cartoes = {};
                     
                     // Buscar nomes dos cartões
@@ -3021,39 +3449,96 @@
                                 cartoes[c.id] = c.bandeira;
                             });
                             
-                            faturas.forEach(f => {
-                                let statusColor = f.status === 'aberta' ? '#f59e0b' : f.status === 'fechada' ? '#8b5cf6' : '#10b981';
-                                let statusText = f.status === 'aberta' ? '🟠 Aberta' : f.status === 'fechada' ? '🟣 Fechada' : '🟢 Paga';
-                                html += `<tr>
-                                    <td>${cartoes[f.cartao_id] || 'Desconhecido'}</td>
-                                    <td>${f.mes}</td>
-                                    <td>${f.data_vencimento}</td>
-                                    <td>R$ ${f.saldo.toFixed(2)}</td>
-                                    <td><span style="background: ${statusColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span></td>
-                                    <td>
-                                        ${f.status === 'aberta' ? `<button onclick="fecharFatura(${f.id})" style="padding: 4px 8px; background: #8b5cf6; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 4px;">Fechar</button>` : ''}
-                                        ${f.status === 'fechada' ? `<button onclick="abrirPagamentoFatura(${f.id}, ${f.saldo})" style="padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 4px;">💰 Pagar</button>` : ''}
-                                        <button onclick="deletarFatura(${f.id})" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Deletar</button>
-                                    </td>
-                                </tr>`;
-                            });
+                            // Adicionar nomes dos cartões às faturas
+                            faturasOriginais = faturas.map(f => ({
+                                ...f,
+                                nomeCarta: cartoes[f.cartao_id] || 'Desconhecido'
+                            }));
                             
-                            const finalHtml = html || '<tr><td colspan="6" style="text-align:center; color:#999;">Nenhuma fatura</td></tr>';
-                            document.getElementById('faturasTabela').innerHTML = finalHtml;
+                            // Carregar select de cartões
+                            const selectCartao = document.getElementById('filtroFaturasCartao');
+                            let htmlCartoes = '<option value="">Todos</option>';
+                            cartoesData.forEach(c => {
+                                if (c.status === 'ATIVO') {
+                                    htmlCartoes += `<option value="${c.id}">${c.bandeira} (${c.ultimos_digitos})</option>`;
+                                }
+                            });
+                            selectCartao.innerHTML = htmlCartoes;
+                            
+                            // Aplicar filtros e renderizar
+                            aplicarFiltrosFaturas();
                         });
                 })
                 .catch(e => console.error('Erro faturas:', e));
         }
+        
+        function aplicarFiltrosFaturas() {
+            // Pegar valores dos filtros
+            filtrosFaturas.cartao = document.getElementById('filtroFaturasCartao').value;
+            filtrosFaturas.status = document.getElementById('filtroFaturasStatus').value;
+            
+            console.log('🔍 Filtros de faturas aplicados:', filtrosFaturas);
+            
+            // Filtrar faturas
+            let faturasFiltradas = faturasOriginais.filter(f => {
+                if (filtrosFaturas.cartao && f.cartao_id !== parseInt(filtrosFaturas.cartao)) return false;
+                if (filtrosFaturas.status && f.status !== filtrosFaturas.status) return false;
+                return true;
+            });
+            
+            // Ordenar por data de vencimento (formato YYYY-MM-DD)
+            faturasFiltradas.sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
+            
+            console.log('✅ Faturas filtradas e ordenadas:', faturasFiltradas.length);
+            
+            // Renderizar tabela
+            renderizarFaturas(faturasFiltradas);
+        }
+        
+        function renderizarFaturas(faturas) {
+            let html = '';
+            
+            faturas.forEach(f => {
+                let statusColor = f.status === 'aberta' ? '#f59e0b' : f.status === 'fechada' ? '#8b5cf6' : '#10b981';
+                let statusText = f.status === 'aberta' ? '🟠 Aberta' : f.status === 'fechada' ? '🟣 Fechada' : '🟢 Paga';
+                html += `<tr>
+                    <td>${f.nomeCarta}</td>
+                    <td>${f.mes}</td>
+                    <td>${f.data_vencimento}</td>
+                    <td>R$ ${f.saldo.toFixed(2)}</td>
+                    <td><span style="background: ${statusColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span></td>
+                    <td>
+                        ${f.status === 'aberta' ? `<button onclick="fecharFatura(${f.id})" style="padding: 4px 8px; background: #8b5cf6; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 4px;">Fechar</button>` : ''}
+                        ${f.status === 'fechada' ? `<button onclick="abrirPagamentoFatura(${f.id}, ${f.saldo})" style="padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 4px;">💰 Pagar</button>` : ''}
+                        <button onclick="deletarFatura(${f.id})" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Deletar</button>
+                    </td>
+                </tr>`;
+            });
+            
+            const finalHtml = html || '<tr><td colspan="6" style="text-align:center; color:#999;">Nenhuma fatura encontrada</td></tr>';
+            document.getElementById('faturasTabela').innerHTML = finalHtml;
+        }
+        
+        function limparFiltrosFaturas() {
+            document.getElementById('filtroFaturasCartao').value = '';
+            document.getElementById('filtroFaturasStatus').value = '';
+            filtrosFaturas = { cartao: '', status: '' };
+            aplicarFiltrosFaturas();
+        }
 
         function criarCartao() {
             const bandeira = document.getElementById('novoCartaoBandeira').value.trim();
-            const ultimos_digitos = document.getElementById('novoCartaoDigitos').value.trim();
-            const limite_credito = document.getElementById('novoCartaoLimite').value ? parseFloat(document.getElementById('novoCartaoLimite').value) : 0;
-            const data_fechamento = document.getElementById('novoCartaoDataFechamento').value;
-            const data_vencimento = document.getElementById('novoCartaoDataVencimento').value;
+            const dia_vencimento = document.getElementById('novoCartaoDiaVencimento').value;
             
-            if (!bandeira || !data_fechamento || !data_vencimento) {
+            if (!bandeira || !dia_vencimento) {
                 alert('⚠️ Preencha todos os campos obrigatórios!');
+                return;
+            }
+            
+            // Converter dia para número e validar
+            const dia = parseInt(dia_vencimento);
+            if (isNaN(dia) || dia < 1 || dia > 31) {
+                alert('⚠️ Dia de vencimento deve estar entre 1 e 31!');
                 return;
             }
             
@@ -3062,10 +3547,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     bandeira: bandeira,
-                    ultimos_digitos: ultimos_digitos,
-                    limite_credito: limite_credito,
-                    data_fechamento: data_fechamento,
-                    data_vencimento: data_vencimento
+                    data_vencimento: `2026-03-${String(dia).padStart(2, '0')}`  // Data fictícia para extrair o dia
                 })
             })
             .then(r => {
@@ -3689,6 +4171,40 @@
                 .catch(e => console.error('Erro saldo projetado:', e));
         }
 
+
+
+        function preencherSaldoAtualConta() {
+            const contaId = document.getElementById('selectContaRegistro').value;
+            const inputSaldo = document.getElementById('valorRegistroSaldo');
+            const inputData = document.getElementById('dataRegistroNovoSaldo');
+            
+            if (!contaId) {
+                inputSaldo.value = '';
+                inputData.value = '';
+                return;
+            }
+            
+            console.log('🔍 Preenchendo saldo para conta:', contaId);
+            console.log('📦 Contas disponíveis:', contasParaSaldo);
+            
+            // Procurar a conta selecionada nos dados armazenados
+            const contaSelecionada = contasParaSaldo.find(c => parseInt(c.id) === parseInt(contaId));
+            
+            if (contaSelecionada) {
+                console.log('✅ Conta encontrada:', contaSelecionada);
+                // Preencher com o saldo_manual (saldo atual da conta)
+                inputSaldo.value = contaSelecionada.saldo_manual.toFixed(2);
+                console.log('💰 Saldo preenchido:', inputSaldo.value);
+                
+                // Preencher data com data de hoje
+                const hoje = new Date().toISOString().split('T')[0];
+                inputData.value = hoje;
+                console.log('📅 Data preenchida:', hoje);
+            } else {
+                console.log('❌ Conta não encontrada com ID:', contaId);
+            }
+        }
+
         function registrarNovoSaldo() {
             const contaId = document.getElementById('selectContaRegistro').value;
             const data = document.getElementById('dataRegistroNovoSaldo').value;
@@ -3754,6 +4270,7 @@
             fetch('/api/contas')
                 .then(r => r.json())
                 .then(contas => {
+                    contasParaSaldo = contas;  // Armazenar dados das contas globalmente
                     let html = '<option value="">Selecione uma conta</option>';
                     contas.forEach(c => {
                         html += `<option value="${c.id}">${getLogoBancoText(c.bandeira)}</option>`;

@@ -9,12 +9,18 @@ from dateutil.relativedelta import relativedelta
 import uuid
 import os
 import urllib.parse
+import glob
+import shutil
 
 app = Flask(__name__)
 CORS(app)
 
 # Arquivo para armazenar dados
 DADOS_FILE = '/tmp/financas_dados.json'
+BACKUP_DIR = '/tmp/financas_backups'
+
+# Criar diretório de backups se não existir
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
 def carregar_dados():
     """Carrega dados do arquivo"""
@@ -42,6 +48,34 @@ def carregar_dados():
                 # Inicializa cartoes se não exists
                 if 'cartoes' not in dados:
                     dados['cartoes'] = []
+                
+                # Migração: converter cartões antigos para nova estrutura
+                for cartao in dados['cartoes']:
+                    # Se tem data_vencimento no formato antigo, extrair o dia
+                    if 'data_vencimento' in cartao and isinstance(cartao['data_vencimento'], str):
+                        try:
+                            data_obj = datetime.strptime(cartao['data_vencimento'], '%Y-%m-%d')
+                            cartao['dia_vencimento'] = data_obj.day
+                        except:
+                            cartao['dia_vencimento'] = 10  # Padrão se falhar
+                        # Remover campo antigo
+                        del cartao['data_vencimento']
+                    
+                    # Se não tem dia_vencimento, atribuir padrão
+                    if 'dia_vencimento' not in cartao:
+                        cartao['dia_vencimento'] = 10
+                    
+                    # Remover campos desnecessários
+                    if 'data_fechamento' in cartao:
+                        del cartao['data_fechamento']
+                    if 'ultimos_digitos' in cartao:
+                        del cartao['ultimos_digitos']
+                    if 'limite_credito' in cartao:
+                        del cartao['limite_credito']
+                    
+                    # Normalizar campos de status
+                    if 'status' in cartao and cartao['status'].lower() == 'ativa':
+                        cartao['status'] = 'ATIVO'
                 
                 # Inicializa faturas se não exists
                 if 'faturas' not in dados:
@@ -385,10 +419,43 @@ def carregar_dados():
         ]
     }
 
+def fazer_backup(dados):
+    """Cria backup automático dos dados antes de salvar"""
+    try:
+        # Usar microsegundos para evitar colisões de timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        backup_file = os.path.join(BACKUP_DIR, f'financas_dados_{timestamp}.json')
+        
+        # Salvar backup
+        with open(backup_file, 'w') as f:
+            json.dump(dados, f, indent=2)
+        
+        # Manter apenas os últimos 10 backups
+        todos_backups = sorted(glob.glob(os.path.join(BACKUP_DIR, 'financas_dados_*.json')))
+        if len(todos_backups) > 10:
+            for backup_antigo in todos_backups[:-10]:
+                try:
+                    os.remove(backup_antigo)
+                except:
+                    pass
+        
+        return backup_file
+    except Exception as e:
+        print(f"❌ Erro ao fazer backup: {e}")
+        return None
+
 def salvar_dados(dados):
-    """Salva dados no arquivo"""
-    with open(DADOS_FILE, 'w') as f:
-        json.dump(dados, f, indent=2)
+    """Salva dados no arquivo com backup automático"""
+    try:
+        # Fazer backup dos dados atuais ANTES de salvar
+        fazer_backup(dados)
+        
+        # Salvar dados
+        with open(DADOS_FILE, 'w') as f:
+            json.dump(dados, f, indent=2)
+    except Exception as e:
+        print(f"❌ Erro ao salvar dados: {e}")
+        raise
 
 # ============= ROTAS =============
 
@@ -415,9 +482,46 @@ def api_status():
 
 @app.route('/api/contas', methods=['GET'])
 def api_contas():
-    """Lista contas"""
+    """Lista contas com saldo calculado"""
     dados = carregar_dados()
-    return jsonify(dados['contas'])
+    
+    hoje = datetime.now()
+    if hoje.day >= 29:
+        mes_pagamento_corrente_obj = hoje + relativedelta(months=1)
+    else:
+        mes_pagamento_corrente_obj = hoje
+    
+    mes_pagamento_corrente = f"{mes_pagamento_corrente_obj.month:02d}/{mes_pagamento_corrente_obj.year}"
+    
+    # Adicionar saldo calculado para cada conta
+    contas_com_saldo = []
+    for conta in dados['contas']:
+        conta_copia = conta.copy()
+        
+        # Receitas da conta (mês corrente)
+        receita_conta = sum(
+            t['valor'] 
+            for t in dados['transacoes']
+            if t['tipo'] == 'RECEITA'
+            and t.get('nome_conta') == conta['bandeira']
+            and t.get('mes_pagamento') == mes_pagamento_corrente
+        )
+        
+        # Despesas da conta (mês corrente, apenas CONTA/DEBITO, não CREDITO)
+        despesa_conta = sum(
+            t['valor']
+            for t in dados['transacoes']
+            if t['tipo'] == 'DESPESA'
+            and t.get('nome_conta') == conta['bandeira']
+            and t.get('mes_pagamento') == mes_pagamento_corrente
+            and t.get('tipo_conta') != 'CREDITO'
+        )
+        
+        # Saldo final = saldo_manual + receitas - despesas
+        conta_copia['saldo'] = conta['saldo_manual'] + receita_conta - despesa_conta
+        contas_com_saldo.append(conta_copia)
+    
+    return jsonify(contas_com_saldo)
 
 @app.route('/api/contas', methods=['POST'])
 def api_criar_conta():
@@ -625,12 +729,25 @@ def gerar_ou_atualizar_fatura(dados, cartao_id, data_vencimento):
             # Criar nova fatura
             cartao = next((c for c in dados['cartoes'] if c['id'] == cartao_id), None)
             if cartao:
+                # Construir data de vencimento: usar DIA do cartão (agora armazenado como número)
+                dia_vencimento = cartao.get('dia_vencimento', 10)  # Padrão: dia 10
+                
+                # Montar data: ano-mês-dia do cartão
+                try:
+                    data_vencimento_fatura = f"{data_obj.year:04d}-{data_obj.month:02d}-{dia_vencimento:02d}"
+                    # Validar se a data é válida
+                    datetime.strptime(data_vencimento_fatura, '%Y-%m-%d')
+                except:
+                    # Se dia for inválido para o mês (ex: 31 de fevereiro), usar último dia do mês
+                    proximo_mes = data_obj + relativedelta(months=1)
+                    ultimo_dia_mes = (proximo_mes - relativedelta(days=1)).day
+                    data_vencimento_fatura = f"{data_obj.year:04d}-{data_obj.month:02d}-{ultimo_dia_mes:02d}"
+                
                 nova_fatura = {
                     'id': max([f['id'] for f in dados['faturas']], default=0) + 1,
                     'cartao_id': cartao_id,
                     'mes': mes_ano,
-                    'data_fechamento': cartao.get('data_fechamento', ''),
-                    'data_vencimento': cartao.get('data_vencimento', ''),
+                    'data_vencimento': data_vencimento_fatura,
                     'status': 'aberta',
                     'saldo': saldo_total,
                     'criada_em': datetime.now().isoformat()
@@ -823,6 +940,28 @@ def api_atualizar_conta(conta_id):
         print(f"❌ Erro ao atualizar conta: {str(e)}")
         return jsonify({'erro': str(e)}), 400
 
+@app.route('/api/contas/<int:conta_id>', methods=['DELETE'])
+def api_deletar_conta(conta_id):
+    """Deleta uma conta"""
+    try:
+        dados = carregar_dados()
+        
+        # Procura a conta
+        conta = next((c for c in dados['contas'] if c['id'] == conta_id), None)
+        if not conta:
+            return jsonify({'erro': 'Conta não encontrada'}), 404
+        
+        # Fazer backup antes de deletar
+        salvar_dados(dados)
+        
+        # Remover a conta
+        dados['contas'] = [c for c in dados['contas'] if c['id'] != conta_id]
+        salvar_dados(dados)
+        
+        return jsonify({'mensagem': f'Conta {conta.get("bandeira", "?")} deletada com sucesso'}), 200
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 400
+
 @app.route('/api/transacoes/<int:transacao_id>/efetivar', methods=['PUT'])
 def api_efetivar_transacao(transacao_id):
     """Efetiva uma transação sensibilizando o saldo se data for passada/presente"""
@@ -886,7 +1025,6 @@ def api_efetivar_transacao(transacao_id):
             
             # Se for CRÉDITO: apenas marcar como efetuada (reconhecimento)
             if tipo_conta == 'CREDITO':
-                print(f'✅ Efetuando transação CRÉDITO ID {transacao_id} - apenas reconhecimento')
                 transacao['efetuada'] = True
                 # Sinaliza como AGENDADO
                 transacao['status'] = 'AGENDADO'
@@ -1045,13 +1183,22 @@ def api_resumo():
     try:
         dados = carregar_dados()
         
-        total_receita = sum(t['valor'] for t in dados['transacoes'] if t['tipo'] == 'RECEITA')
-        total_despesa = sum(t['valor'] for t in dados['transacoes'] if t['tipo'] == 'DESPESA')
-        saldo_manual = sum(c['saldo_manual'] for c in dados['contas'])
+        # Obter filtro de datas do ciclo (se fornecidas como query parameters)
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
         
-        # Calcular o mês de pagamento do período de fechamento corrente
-        # Ciclo: começa no penúltimo dia útil de um mês, vai até antepenúltimo dia útil do próximo
-        # Se hoje >= 29, já estamos no próximo ciclo (próximo mês de pagamento)
+        # Se nenhuma data for fornecida, usar o mês corrente
+        if data_inicio and data_fim:
+            try:
+                data_inicio_obj = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+                data_fim_obj = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            except Exception as e:
+                data_inicio_obj = None
+                data_fim_obj = None
+        else:
+            data_inicio_obj = None
+            data_fim_obj = None
+        
         hoje = datetime.now()
         
         if hoje.day >= 29:
@@ -1061,35 +1208,151 @@ def api_resumo():
         
         mes_pagamento_corrente = f"{mes_pagamento_corrente_obj.month:02d}/{mes_pagamento_corrente_obj.year}"
         
-        # Calcular receitas pendentes (não efetivadas) do período de fechamento corrente
-        receitas_pendentes = sum(
-            t['valor'] 
-            for t in dados['transacoes'] 
-            if t['tipo'] == 'RECEITA' 
-            and t.get('status') in ['PREVISTO', 'AGENDADO', 'REC_PENDENTE']
-            and t.get('efetuada') == False
-            and t.get('mes_pagamento') == mes_pagamento_corrente
+        # Função auxiliar para verificar se está dentro do período
+        def esta_no_periodo(transacao):
+            if not data_inicio_obj or not data_fim_obj:
+                return False
+            
+            data_vencimento_str = transacao.get('data_vencimento', '')
+            data_debito_str = transacao.get('data_debito', '')
+            data_str = data_vencimento_str or data_debito_str  # Tentar data_vencimento ou data_debito
+            
+            try:
+                if not data_str:
+                    return False
+                data_transacao = datetime.strptime(data_str, '%Y-%m-%d').date()
+                resultado = data_inicio_obj <= data_transacao <= data_fim_obj
+                return resultado
+            except Exception as e:
+                return False
+        
+        # Usar ciclo se definido, senão usar mês corrente
+        usar_ciclo = data_inicio_obj and data_fim_obj
+        
+        # Calcular receitas (sem cartão de crédito)
+        if usar_ciclo:
+            total_receita = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'RECEITA' 
+                and esta_no_periodo(t)
+            )
+        else:
+            total_receita = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'RECEITA' 
+                and t.get('mes_pagamento') == mes_pagamento_corrente
+            )
+        
+        # Calcular despesas só de CONTA CORRENTE/DÉBITO, não de crédito
+        if usar_ciclo:
+            total_despesa = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'DESPESA' 
+                and esta_no_periodo(t)
+                and t.get('tipo_conta') != 'CREDITO'
+            )
+        else:
+            total_despesa = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'DESPESA' 
+                and t.get('mes_pagamento') == mes_pagamento_corrente
+                and t.get('tipo_conta') != 'CREDITO'
+            )
+        
+        # Somar todos os saldos das faturas abertas (cartões)
+        total_faturas = sum(
+            f['saldo'] 
+            for f in dados['faturas']
+            if f['status'] == 'aberta'
         )
         
-        # Calcular despesas pendentes (não efetivadas) do período de fechamento corrente
-        despesas_pendentes = sum(
-            t['valor'] 
-            for t in dados['transacoes'] 
-            if t['tipo'] == 'DESPESA' 
-            and t.get('status') in ['PREVISTO', 'AGENDADO']
-            and t.get('efetuada') == False
-            and t.get('mes_pagamento') == mes_pagamento_corrente
-        )
+        saldo_manual = sum(c['saldo_manual'] for c in dados['contas'])
+        
+        # Receitas pendentes
+        if usar_ciclo:
+            receitas_efetivadas_ciclo = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'RECEITA' 
+                and t.get('efetuada') == True
+                and esta_no_periodo(t)
+                and t.get('tipo_conta') != 'CREDITO'
+            )
+            receitas_pendentes = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'RECEITA' 
+                and t.get('efetuada') == False
+                and t.get('status') in ['PREVISTO', 'AGENDADO', 'REC_PENDENTE']
+                and t.get('tipo_conta') != 'CREDITO'
+                and esta_no_periodo(t)
+            )
+            # Total inclui efetivadas + pendentes no ciclo
+            receitas_ciclo = receitas_efetivadas_ciclo + receitas_pendentes
+        else:
+            receitas_pendentes = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'RECEITA' 
+                and t.get('status') in ['PREVISTO', 'AGENDADO', 'REC_PENDENTE']
+                and t.get('efetuada') == False
+                and t.get('tipo_conta') != 'CREDITO'
+                and t.get('mes_pagamento') == mes_pagamento_corrente
+            )
+            receitas_ciclo = 0
+        
+        # Despesas pendentes (só contas, não crédito)
+        if usar_ciclo:
+            despesas_efetivadas_ciclo = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'DESPESA' 
+                and t.get('efetuada') == True
+                and esta_no_periodo(t)
+                and t.get('tipo_conta') != 'CREDITO'
+            )
+            despesas_pendentes = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'DESPESA' 
+                and t.get('efetuada') == False
+                and t.get('status') in ['PREVISTO', 'AGENDADO']
+                and esta_no_periodo(t)
+                and t.get('tipo_conta') != 'CREDITO'
+            )
+            # Total inclui efetivadas + pendentes no ciclo
+            despesas_ciclo = despesas_efetivadas_ciclo + despesas_pendentes
+        else:
+            despesas_pendentes = sum(
+                t['valor'] 
+                for t in dados['transacoes'] 
+                if t['tipo'] == 'DESPESA' 
+                and t.get('status') in ['PREVISTO', 'AGENDADO']
+                and t.get('efetuada') == False
+                and t.get('mes_pagamento') == mes_pagamento_corrente
+                and t.get('tipo_conta') != 'CREDITO'
+            )
+            despesas_ciclo = 0
         
         return jsonify({
             'total_receita': total_receita,
             'total_despesa': total_despesa,
+            'total_faturas': total_faturas,
             'receitas_pendentes': receitas_pendentes,
             'despesas_pendentes': despesas_pendentes,
+            'receitas_ciclo': receitas_ciclo,  # Inclui efetivadas + pendentes do período
+            'despesas_ciclo': despesas_ciclo,  # Inclui efetivadas + pendentes do período
             'saldo_manual': saldo_manual,
+            'saldo_contas': saldo_manual + total_receita - total_despesa,
             'saldo_liquido': saldo_manual + total_receita - total_despesa,
             'num_contas': len(dados['contas']),
-            'num_transacoes': len(dados['transacoes'])
+            'num_transacoes': len(dados['transacoes']),
+            'num_faturas': len([f for f in dados['faturas'] if f['status'] == 'aberta']),
+            'usando_ciclo': usar_ciclo  # Indica se está usando ciclo ou mês corrente
         })
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
@@ -1246,13 +1509,23 @@ def api_criar_cartao():
     """Cria novo cartão de crédito"""
     try:
         dados = carregar_dados()
+        
+        # Extrair apenas o DIA da data de vencimento
+        data_vencimento_str = request.json.get('data_vencimento', '')
+        dia_vencimento = 10  # Padrão se não informado
+        
+        if data_vencimento_str:
+            try:
+                # Extrair dia da data (formato YYYY-MM-DD)
+                data_obj = datetime.strptime(data_vencimento_str, '%Y-%m-%d')
+                dia_vencimento = data_obj.day
+            except:
+                pass
+        
         novo_cartao = {
             'id': max([c['id'] for c in dados['cartoes']], default=0) + 1,
             'bandeira': request.json['bandeira'],
-            'ultimos_digitos': request.json.get('ultimos_digitos', ''),
-            'limite_credito': float(request.json.get('limite_credito', 0)),
-            'data_fechamento': request.json.get('data_fechamento', ''),
-            'data_vencimento': request.json.get('data_vencimento', ''),
+            'dia_vencimento': dia_vencimento,
             'status': 'ATIVO',
             'criado_em': datetime.now().isoformat()
         }
@@ -1272,15 +1545,20 @@ def api_atualizar_cartao(cartao_id):
         if not cartao:
             return jsonify({'erro': 'Cartão não encontrado'}), 404
         
-        campos_editaveis = ['bandeira', 'ultimos_digitos', 'limite_credito', 
-                           'data_fechamento', 'data_vencimento', 'status']
+        campos_editaveis = ['bandeira', 'status']
         
         for campo in campos_editaveis:
             if campo in request.json:
-                if campo == 'limite_credito':
-                    cartao[campo] = float(request.json[campo])
-                else:
-                    cartao[campo] = request.json[campo]
+                cartao[campo] = request.json[campo]
+        
+        # Atualizar dia_vencimento se fornecido
+        if 'dia_vencimento' in request.json:
+            try:
+                dia = int(request.json['dia_vencimento'])
+                if 1 <= dia <= 31:
+                    cartao['dia_vencimento'] = dia
+            except:
+                pass
         
         salvar_dados(dados)
         return jsonify(cartao), 200
@@ -1393,10 +1671,6 @@ def api_deletar_fatura(fatura_id):
         
         if not fatura:
             return jsonify({'erro': 'Fatura não encontrada'}), 404
-        
-        # Não permite deletar fatura fechada
-        if fatura['status'] == 'fechada':
-            return jsonify({'erro': 'Não é possível deletar fatura fechada'}), 400
         
         dados['faturas'] = [f for f in dados['faturas'] if f['id'] != fatura_id]
         salvar_dados(dados)
